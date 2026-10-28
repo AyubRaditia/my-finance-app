@@ -1,0 +1,823 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Personal Finance Tracker</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Font Awesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Lucide Icons CDN -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <!-- React & React DOM CDN -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <!-- Babel for JSX Compilation in browser -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <!-- Google Fonts Inter -->
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['"Plus Jakarta Sans"', 'sans-serif'],
+                    },
+                    colors: {
+                        gold: {
+                            400: '#FACC15',
+                            500: '#EAB308',
+                            600: '#CA8A04',
+                            glow: 'rgba(234, 179, 8, 0.25)',
+                        },
+                        dark: {
+                            bg: '#0B0F17',
+                            card: '#151C2C',
+                            border: '#232E47',
+                            lighter: '#1E293B'
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body {
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            background-color: #06090E;
+            color: #E2E8F0;
+            user-select: none;
+            -webkit-tap-highlight-color: transparent;
+        }
+        /* Custom scrollbar */
+        ::-webkit-scrollbar {
+            width: 4px;
+            height: 4px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #0B0F17;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #232E47;
+            border-radius: 4px;
+        }
+        /* Glowing Accent Effects */
+        .gold-gradient-bg {
+            background: linear-gradient(135deg, #FACC15 0%, #CA8A04 100%);
+        }
+        .gold-border-glow {
+            box-shadow: 0 0 15px rgba(234, 179, 8, 0.2);
+        }
+        /* Touch Device Optimizations */
+        button, a, input, select {
+            touch-action: manipulation;
+        }
+    </style>
+</head>
+<body class="flex justify-center items-center min-h-screen sm:py-6 bg-slate-950">
+
+    <!-- Container Utama Tampilan Mobile HP -->
+    <div id="root" class="w-full max-w-md h-[100vh] sm:h-[844px] bg-dark-bg sm:rounded-[36px] shadow-2xl overflow-hidden flex flex-col border border-slate-800/80 relative"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useRef } = React;
+
+        // Data awal sampel jika LocalStorage masih kosong
+        const INITIAL_ACCOUNTS = [
+            { id: 'acc-1', name: 'Bank BCA', type: 'bank', balance: 12500000, icon: 'fa-building-columns', color: 'bg-blue-600' },
+            { id: 'acc-2', name: 'Cash / Dompet', type: 'cash', balance: 450000, icon: 'fa-wallet', color: 'bg-emerald-600' },
+            { id: 'acc-3', name: 'Bibit (Reksa Dana)', type: 'reksadana', balance: 8750000, icon: 'fa-chart-line', color: 'bg-amber-600' },
+            { id: 'acc-4', name: 'Crypto / Stock', type: 'investment', balance: 3200000, icon: 'fa-coins', color: 'bg-purple-600' }
+        ];
+
+        const INITIAL_TRANSACTIONS = [
+            { id: 'tx-1', date: new Date().toISOString().split('T')[0], type: 'expense', amount: 35000, category: 'Makanan & Minuman', fromAccount: 'acc-2', note: 'Makan Siang Ayam Geprek' },
+            { id: 'tx-2', date: new Date().toISOString().split('T')[0], type: 'income', amount: 8500000, category: 'Gaji / Income', toAccount: 'acc-1', note: 'Gaji Bulanan' },
+            { id: 'tx-3', date: new Date().toISOString().split('T')[0], type: 'transfer', amount: 1000000, fromAccount: 'acc-1', toAccount: 'acc-3', note: 'Topup Reksa Dana Bulanan' }
+        ];
+
+        const CATEGORIES = {
+            expense: ['Makanan & Minuman', 'Transportasi', 'Belanja', 'Tagihan & Utilitas', 'Hiburan', 'Kesehatan', 'Lainnya'],
+            income: ['Gaji / Income', 'Bonus & Cashback', 'Hasil Investasi', 'Sampingan', 'Lainnya']
+        };
+
+        // Utility Format Rupiah
+        const formatIDR = (val) => {
+            return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(val);
+        };
+
+        function App() {
+            // State Aplikasi
+            const [accounts, setAccounts] = useState(() => {
+                const saved = localStorage.getItem('fin_accounts');
+                return saved ? JSON.parse(saved) : INITIAL_ACCOUNTS;
+            });
+
+            const [transactions, setTransactions] = useState(() => {
+                const saved = localStorage.getItem('fin_transactions');
+                return saved ? JSON.parse(saved) : INITIAL_TRANSACTIONS;
+            });
+
+            const [activeTab, setActiveTab] = useState('dashboard'); // 'dashboard', 'transactions', 'accounts', 'analytics'
+            const [isModalOpen, setIsModalOpen] = useState(false);
+            const [isListening, setIsListening] = useState(false);
+            const [isScanning, setIsScanning] = useState(false);
+            const [voiceFeedback, setVoiceFeedback] = useState('');
+
+            // Form State
+            const [txType, setTxType] = useState('expense'); // 'expense', 'income', 'transfer'
+            const [amount, setAmount] = useState('');
+            const [category, setCategory] = useState(CATEGORIES.expense[0]);
+            const [fromAcc, setFromAcc] = useState(accounts[0]?.id || '');
+            const [toAcc, setToAcc] = useState(accounts[1]?.id || '');
+            const [note, setNote] = useState('');
+
+            // State Modal Tambah Rekening
+            const [isAccModalOpen, setIsAccModalOpen] = useState(false);
+            const [newAccName, setNewAccName] = useState('');
+            const [newAccType, setNewAccType] = useState('bank');
+            const [newAccBalance, setNewAccBalance] = useState('');
+
+            // Persistent LocalStorage Sync
+            useEffect(() => {
+                localStorage.setItem('fin_accounts', JSON.stringify(accounts));
+            }, [accounts]);
+
+            useEffect(() => {
+                localStorage.setItem('fin_transactions', JSON.stringify(transactions));
+            }, [transactions]);
+
+            // Hitung Total Kekayaan Bersih (Net Worth)
+            const totalNetWorth = accounts.reduce((acc, curr) => acc + Number(curr.balance), 0);
+
+            // Perhitungan Transaksi Tambah
+            const handleAddTransaction = (e) => {
+                e?.preventDefault();
+                const numAmount = parseFloat(amount);
+
+                if (!numAmount || numAmount <= 0) {
+                    alert('Masukkan nominal angka yang valid!');
+                    return;
+                }
+
+                const newTx = {
+                    id: 'tx-' + Date.now(),
+                    date: new Date().toISOString().split('T')[0],
+                    type: txType,
+                    amount: numAmount,
+                    category: txType === 'transfer' ? 'Transfer' : category,
+                    fromAccount: txType === 'income' ? null : fromAcc,
+                    toAccount: txType === 'expense' ? null : toAcc,
+                    note: note || (txType === 'transfer' ? 'Transfer Antar Akun' : category)
+                };
+
+                // Update saldo akun otomatis
+                const updatedAccounts = accounts.map(acc => {
+                    let balance = Number(acc.balance);
+                    if (txType === 'expense' && acc.id === fromAcc) {
+                        balance -= numAmount;
+                    } else if (txType === 'income' && acc.id === toAcc) {
+                        balance += numAmount;
+                    } else if (txType === 'transfer') {
+                        if (acc.id === fromAcc) balance -= numAmount;
+                        if (acc.id === toAcc) balance += numAmount;
+                    }
+                    return { ...acc, balance };
+                });
+
+                setAccounts(updatedAccounts);
+                setTransactions([newTx, ...transactions]);
+                
+                // Reset & Close Modal
+                setAmount('');
+                setNote('');
+                setIsModalOpen(false);
+            };
+
+            // Tambah Akun Baru
+            const handleAddAccount = (e) => {
+                e.preventDefault();
+                if (!newAccName || !newAccBalance) return;
+
+                const iconMap = {
+                    bank: 'fa-building-columns',
+                    cash: 'fa-wallet',
+                    reksadana: 'fa-chart-line',
+                    investment: 'fa-coins'
+                };
+                const colorMap = {
+                    bank: 'bg-blue-600',
+                    cash: 'bg-emerald-600',
+                    reksadana: 'bg-amber-600',
+                    investment: 'bg-purple-600'
+                };
+
+                const newAccount = {
+                    id: 'acc-' + Date.now(),
+                    name: newAccName,
+                    type: newAccType,
+                    balance: parseFloat(newAccBalance) || 0,
+                    icon: iconMap[newAccType] || 'fa-wallet',
+                    color: colorMap[newAccType] || 'bg-slate-600'
+                };
+
+                setAccounts([...accounts, newAccount]);
+                setNewAccName('');
+                setNewAccBalance('');
+                setIsAccModalOpen(false);
+            };
+
+            // Fitur Speech Recognition (Mic Voice Input)
+            const handleVoiceInput = () => {
+                if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
+                    alert('Browser anda tidak mendukung fitur pengenalan suara. Gunakan Google Chrome di HP Android/iOS.');
+                    return;
+                }
+
+                const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+                const recognition = new SpeechRecognition();
+                recognition.lang = 'id-ID';
+                recognition.continuous = false;
+                recognition.interimResults = false;
+
+                setIsListening(true);
+                setVoiceFeedback('Mendengarkan... Katakan misal: "Beli makan 25000 dari Cash"');
+
+                recognition.onresult = (event) => {
+                    const text = event.results[0][0].transcript.toLowerCase();
+                    setVoiceFeedback(`Terdengar: "${text}"`);
+                    parseVoiceText(text);
+                    setIsListening(false);
+                };
+
+                recognition.onerror = () => {
+                    setVoiceFeedback('Gagal mengenali suara. Coba lagi!');
+                    setIsListening(false);
+                };
+
+                recognition.onend = () => {
+                    setIsListening(false);
+                };
+
+                recognition.start();
+            };
+
+            // Parse Perintah Suara Bahasa Indonesia
+            const parseVoiceText = (text) => {
+                // Cari Nominal Angka
+                const numbers = text.match(/\d+/g);
+                if (numbers) {
+                    const extractedAmount = numbers.join('');
+                    setAmount(extractedAmount);
+                }
+
+                // Cek jenis transaksi & kata kunci
+                if (text.includes('beli') || text.includes('bayar') || text.includes('pengeluaran') || text.includes('makan')) {
+                    setTxType('expense');
+                } else if (text.includes('dapat') || text.includes('gaji') || text.includes('pemasukan') || text.includes('terima')) {
+                    setTxType('income');
+                } else if (text.includes('transfer') || text.includes('pindah')) {
+                    setTxType('transfer');
+                }
+
+                // Deteksi Akun Sumber / Dompet dari ucapan
+                accounts.forEach(acc => {
+                    if (text.includes(acc.name.toLowerCase()) || text.includes(acc.type)) {
+                        setFromAcc(acc.id);
+                    }
+                });
+
+                setNote(text);
+                setIsModalOpen(true);
+            };
+
+            // Fitur Simulasi OCR Scan Struk/Gambar
+            const handleImageScan = (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
+
+                setIsScanning(true);
+                // Simulasi pembacaan struk dengan delay visual
+                setTimeout(() => {
+                    setIsScanning(false);
+                    // Acak nominal simulasi struk belanja
+                    const dummyAmounts = [45000, 128000, 75000, 230000];
+                    const randomAmount = dummyAmounts[Math.floor(Math.random() * dummyAmounts.length)];
+                    
+                    setTxType('expense');
+                    setAmount(randomAmount.toString());
+                    setCategory('Belanja');
+                    setNote('Struk Belanja Supermarket (OCR Auto)');
+                    setIsModalOpen(true);
+                }, 1500);
+            };
+
+            // Backup & Restore Data
+            const handleExportData = () => {
+                const data = JSON.stringify({ accounts, transactions }, null, 2);
+                const blob = new Blob([data], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `backup-keuangan-${new Date().toISOString().split('T')[0]}.json`;
+                a.click();
+            };
+
+            const handleImportData = (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
+
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                    try {
+                        const parsed = JSON.parse(event.target.result);
+                        if (parsed.accounts && parsed.transactions) {
+                            setAccounts(parsed.accounts);
+                            setTransactions(parsed.transactions);
+                            alert('Data keuangan berhasil dipulihkan!');
+                        } else {
+                            alert('Format file JSON tidak valid!');
+                        }
+                    } catch (err) {
+                        alert('Gagal membaca file JSON');
+                    }
+                };
+                reader.readAsText(file);
+            };
+
+            return (
+                <div className="flex flex-col h-full bg-dark-bg text-slate-100 font-sans relative">
+                    
+                    {/* Header HP Top Bar */}
+                    <div className="px-5 pt-5 pb-3 bg-dark-card border-b border-dark-border flex justify-between items-center z-10">
+                        <div className="flex items-center space-x-3">
+                            <div className="w-9 h-9 rounded-full bg-gradient-to-tr from-gold-600 to-gold-400 flex items-center justify-center font-bold text-slate-950 shadow-md">
+                                <i className="fa-solid fa-user text-sm"></i>
+                            </div>
+                            <div>
+                                <p className="text-xs text-slate-400 font-medium">Dompet Pribadi</p>
+                                <h1 className="text-sm font-bold tracking-tight text-slate-100">Financial Hub</h1>
+                            </div>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                            {/* Tombol Backup / Restore */}
+                            <label className="p-2 rounded-lg bg-dark-lighter text-slate-300 hover:text-gold-400 cursor-pointer transition">
+                                <i className="fa-solid fa-file-import text-xs"></i>
+                                <input type="file" accept=".json" onChange={handleImportData} className="hidden" />
+                            </label>
+                            <button onClick={handleExportData} className="p-2 rounded-lg bg-dark-lighter text-slate-300 hover:text-gold-400 transition" title="Backup JSON">
+                                <i className="fa-solid fa-download text-xs"></i>
+                            </button>
+                        </div>
+                    </div>
+
+                    {/* Content View Port */}
+                    <div className="flex-1 overflow-y-auto px-4 py-4 space-y-5 pb-24">
+
+                        {/* TAB 1: DASHBOARD */}
+                        {activeTab === 'dashboard' && (
+                            <>
+                                {/* Total Net Worth Gold Card */}
+                                <div className="gold-gradient-bg p-5 rounded-2xl text-slate-950 shadow-lg gold-border-glow relative overflow-hidden">
+                                    <div className="absolute -right-6 -bottom-6 opacity-15 text-9xl">
+                                        <i className="fa-solid fa-vault"></i>
+                                    </div>
+                                    <p className="text-xs font-semibold uppercase tracking-wider text-slate-900/80">Total Kekayaan (Net Worth)</p>
+                                    <h2 className="text-2xl font-black mt-1 tracking-tight">
+                                        {formatIDR(totalNetWorth)}
+                                    </h2>
+
+                                    <div className="mt-4 pt-3 border-t border-slate-950/20 flex justify-between items-center text-xs">
+                                        <span className="font-semibold text-slate-900/90">
+                                            <i className="fa-solid fa-wallet mr-1"></i> {accounts.length} Akun & Rekening
+                                        </span>
+                                        <span className="bg-slate-950/10 px-2.5 py-1 rounded-full text-[10px] font-bold text-slate-950">
+                                            Auto Synced
+                                        </span>
+                                    </div>
+                                </div>
+
+                                {/* Smart Input Bar (Voice & Camera OCR Scan) */}
+                                <div className="bg-dark-card p-3 rounded-xl border border-dark-border flex items-center justify-between gap-2 shadow-sm">
+                                    <button 
+                                        onClick={handleVoiceInput}
+                                        className={`flex-1 flex items-center justify-center gap-2 py-2.5 px-3 rounded-lg border text-xs font-semibold transition ${
+                                            isListening ? 'bg-red-500/20 text-red-400 border-red-500 animate-pulse' : 'bg-dark-lighter border-slate-700 text-slate-200 hover:border-gold-500 hover:text-gold-400'
+                                        }`}
+                                    >
+                                        <i className={`fa-solid ${isListening ? 'fa-microphone-slash' : 'fa-microphone'} text-sm text-gold-400`}></i>
+                                        <span>{isListening ? 'Mendengarkan...' : 'Input Suara (Mic)'}</span>
+                                    </button>
+
+                                    <label className="flex-1 flex items-center justify-center gap-2 py-2.5 px-3 rounded-lg bg-dark-lighter border border-slate-700 text-slate-200 hover:border-gold-500 hover:text-gold-400 text-xs font-semibold cursor-pointer transition">
+                                        <i className="fa-solid fa-camera text-sm text-gold-400"></i>
+                                        <span>{isScanning ? 'Scanned...' : 'Scan Struk (OCR)'}</span>
+                                        <input type="file" accept="image/*" onChange={handleImageScan} className="hidden" />
+                                    </label>
+                                </div>
+
+                                {voiceFeedback && (
+                                    <p className="text-[11px] text-gold-400/90 italic text-center px-2">{voiceFeedback}</p>
+                                )}
+
+                                {/* Quick Accounts Summary */}
+                                <div>
+                                    <div className="flex justify-between items-center mb-3">
+                                        <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400">Daftar Aset & Saldo</h3>
+                                        <button onClick={() => setActiveTab('accounts')} className="text-xs font-semibold text-gold-400 hover:underline">
+                                            Lihat Semua
+                                        </button>
+                                    </div>
+
+                                    <div className="grid grid-cols-2 gap-2.5">
+                                        {accounts.map(acc => (
+                                            <div key={acc.id} className="bg-dark-card p-3 rounded-xl border border-dark-border flex flex-col justify-between space-y-2">
+                                                <div className="flex items-center justify-between">
+                                                    <span className={`w-7 h-7 rounded-lg ${acc.color} flex items-center justify-center text-white text-xs`}>
+                                                        <i className={`fa-solid ${acc.icon}`}></i>
+                                                    </span>
+                                                    <span className="text-[10px] uppercase font-bold text-slate-500">{acc.type}</span>
+                                                </div>
+                                                <div>
+                                                    <p className="text-xs font-medium text-slate-400 truncate">{acc.name}</p>
+                                                    <p className="text-sm font-bold text-slate-100 mt-0.5">{formatIDR(acc.balance)}</p>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                {/* Riwayat Transaksi Terbaru */}
+                                <div>
+                                    <div className="flex justify-between items-center mb-3">
+                                        <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400">Transaksi Terakhir</h3>
+                                        <button onClick={() => setActiveTab('transactions')} className="text-xs font-semibold text-gold-400 hover:underline">
+                                            Riwayat Lengkap
+                                        </button>
+                                    </div>
+
+                                    <div className="space-y-2">
+                                        {transactions.slice(0, 4).map(tx => {
+                                            const isExpense = tx.type === 'expense';
+                                            const isIncome = tx.type === 'income';
+                                            return (
+                                                <div key={tx.id} className="bg-dark-card p-3 rounded-xl border border-dark-border flex items-center justify-between">
+                                                    <div className="flex items-center space-x-3">
+                                                        <div className={`w-9 h-9 rounded-xl flex items-center justify-center text-xs font-bold ${
+                                                            isExpense ? 'bg-red-500/10 text-red-400 border border-red-500/20' :
+                                                            isIncome ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' :
+                                                            'bg-blue-500/10 text-blue-400 border border-blue-500/20'
+                                                        }`}>
+                                                            <i className={`fa-solid ${
+                                                                isExpense ? 'fa-arrow-up' : isIncome ? 'fa-arrow-down' : 'fa-right-left'
+                                                            }`}></i>
+                                                        </div>
+                                                        <div>
+                                                            <p className="text-xs font-bold text-slate-200">{tx.note || tx.category}</p>
+                                                            <p className="text-[10px] text-slate-500">{tx.date} • {tx.category}</p>
+                                                        </div>
+                                                    </div>
+                                                    <div className="text-right">
+                                                        <p className={`text-xs font-bold ${
+                                                            isExpense ? 'text-red-400' : isIncome ? 'text-emerald-400' : 'text-blue-400'
+                                                        }`}>
+                                                            {isExpense ? '-' : isIncome ? '+' : ''}{formatIDR(tx.amount)}
+                                                        </p>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                            </>
+                        )}
+
+                        {/* TAB 2: RIWAYAT TRANSAKSI */}
+                        {activeTab === 'transactions' && (
+                            <div className="space-y-3">
+                                <h3 className="text-sm font-bold text-slate-200">Semua Catatan Transaksi</h3>
+                                {transactions.length === 0 ? (
+                                    <p className="text-xs text-slate-500 text-center py-8">Belum ada transaksi tercatat.</p>
+                                ) : (
+                                    transactions.map(tx => (
+                                        <div key={tx.id} className="bg-dark-card p-3.5 rounded-xl border border-dark-border flex items-center justify-between">
+                                            <div className="flex items-center space-x-3">
+                                                <div className={`w-9 h-9 rounded-xl flex items-center justify-center text-xs font-bold ${
+                                                    tx.type === 'expense' ? 'bg-red-500/10 text-red-400' :
+                                                    tx.type === 'income' ? 'bg-emerald-500/10 text-emerald-400' :
+                                                    'bg-blue-500/10 text-blue-400'
+                                                }`}>
+                                                    <i className={`fa-solid ${
+                                                        tx.type === 'expense' ? 'fa-arrow-up' : tx.type === 'income' ? 'fa-arrow-down' : 'fa-right-left'
+                                                    }`}></i>
+                                                </div>
+                                                <div>
+                                                    <p className="text-xs font-bold text-slate-100">{tx.note}</p>
+                                                    <p className="text-[10px] text-slate-400">{tx.date} • <span className="text-gold-400">{tx.category}</span></p>
+                                                </div>
+                                            </div>
+                                            <p className={`text-xs font-bold ${
+                                                tx.type === 'expense' ? 'text-red-400' : tx.type === 'income' ? 'text-emerald-400' : 'text-blue-400'
+                                            }`}>
+                                                {tx.type === 'expense' ? '-' : tx.type === 'income' ? '+' : ''}{formatIDR(tx.amount)}
+                                            </p>
+                                        </div>
+                                    ))
+                                )}
+                            </div>
+                        )}
+
+                        {/* TAB 3: MANAJEMEN AKUN & REKENING */}
+                        {activeTab === 'accounts' && (
+                            <div className="space-y-4">
+                                <div className="flex justify-between items-center">
+                                    <h3 className="text-sm font-bold text-slate-200">Kelola Akun Keuangan</h3>
+                                    <button 
+                                        onClick={() => setIsAccModalOpen(true)}
+                                        className="text-xs font-bold bg-gold-500 text-slate-950 px-3 py-1.5 rounded-lg hover:bg-gold-400 transition"
+                                    >
+                                        <i className="fa-solid fa-plus mr-1"></i> Tambah Akun
+                                    </button>
+                                </div>
+
+                                <div className="space-y-2.5">
+                                    {accounts.map(acc => (
+                                        <div key={acc.id} className="bg-dark-card p-4 rounded-xl border border-dark-border flex items-center justify-between">
+                                            <div className="flex items-center space-x-3">
+                                                <div className={`w-10 h-10 rounded-xl ${acc.color} flex items-center justify-center text-white text-base shadow-md`}>
+                                                    <i className={`fa-solid ${acc.icon}`}></i>
+                                                </div>
+                                                <div>
+                                                    <h4 className="text-xs font-bold text-slate-100">{acc.name}</h4>
+                                                    <span className="text-[10px] text-slate-400 uppercase tracking-wider">{acc.type}</span>
+                                                </div>
+                                            </div>
+                                            <div className="text-right">
+                                                <p className="text-xs font-bold text-gold-400">{formatIDR(acc.balance)}</p>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+
+                        {/* TAB 4: ANALITYCS & STATISTIK */}
+                        {activeTab === 'analytics' && (
+                            <div className="space-y-4">
+                                <h3 className="text-sm font-bold text-slate-200">Analisis Ringkas</h3>
+                                
+                                <div className="bg-dark-card p-4 rounded-xl border border-dark-border space-y-3">
+                                    <h4 className="text-xs font-bold text-slate-300 uppercase tracking-wider">Sebaran Aset</h4>
+                                    {accounts.map(acc => {
+                                        const percentage = totalNetWorth > 0 ? Math.round((acc.balance / totalNetWorth) * 100) : 0;
+                                        return (
+                                            <div key={acc.id} className="space-y-1">
+                                                <div className="flex justify-between text-xs">
+                                                    <span className="text-slate-400">{acc.name}</span>
+                                                    <span className="font-bold text-slate-200">{percentage}%</span>
+                                                </div>
+                                                <div className="w-full h-2 bg-dark-lighter rounded-full overflow-hidden">
+                                                    <div className={`h-full ${acc.color}`} style={{ width: `${percentage}%` }}></div>
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+                        )}
+
+                    </div>
+
+                    {/* FAB (Floating Action Button) Tambah Transaksi */}
+                    <div className="absolute bottom-20 right-5 z-20">
+                        <button 
+                            onClick={() => setIsModalOpen(true)}
+                            className="w-13 h-13 rounded-full gold-gradient-bg text-slate-950 font-bold flex items-center justify-center shadow-xl hover:scale-105 active:scale-95 transition"
+                            style={{ width: '54px', height: '54px' }}
+                        >
+                            <i className="fa-solid fa-plus text-xl"></i>
+                        </button>
+                    </div>
+
+                    {/* Bottom Navigation Bar */}
+                    <div className="absolute bottom-0 left-0 right-0 bg-dark-card border-t border-dark-border px-6 py-2.5 flex justify-between items-center z-10">
+                        <button 
+                            onClick={() => setActiveTab('dashboard')}
+                            className={`flex flex-col items-center space-y-1 text-xs transition ${activeTab === 'dashboard' ? 'text-gold-400 font-bold' : 'text-slate-500'}`}
+                        >
+                            <i className="fa-solid fa-house text-base"></i>
+                            <span className="text-[10px]">Home</span>
+                        </button>
+                        <button 
+                            onClick={() => setActiveTab('transactions')}
+                            className={`flex flex-col items-center space-y-1 text-xs transition ${activeTab === 'transactions' ? 'text-gold-400 font-bold' : 'text-slate-500'}`}
+                        >
+                            <i className="fa-solid fa-receipt text-base"></i>
+                            <span className="text-[10px]">Riwayat</span>
+                        </button>
+                        <button 
+                            onClick={() => setActiveTab('accounts')}
+                            className={`flex flex-col items-center space-y-1 text-xs transition ${activeTab === 'accounts' ? 'text-gold-400 font-bold' : 'text-slate-500'}`}
+                        >
+                            <i className="fa-solid fa-wallet text-base"></i>
+                            <span className="text-[10px]">Aset</span>
+                        </button>
+                        <button 
+                            onClick={() => setActiveTab('analytics')}
+                            className={`flex flex-col items-center space-y-1 text-xs transition ${activeTab === 'analytics' ? 'text-gold-400 font-bold' : 'text-slate-500'}`}
+                        >
+                            <i className="fa-solid fa-chart-pie text-base"></i>
+                            <span className="text-[10px]">Analisis</span>
+                        </button>
+                    </div>
+
+                    {/* MODAL INPUT TRANSAKSI */}
+                    {isModalOpen && (
+                        <div className="absolute inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
+                            <div className="bg-dark-card w-full max-w-md rounded-t-2xl sm:rounded-2xl border border-dark-border p-5 space-y-4 animate-in slide-in-from-bottom">
+                                <div className="flex justify-between items-center border-b border-dark-border pb-3">
+                                    <h3 className="text-sm font-bold text-slate-100">Catat Transaksi Baru</h3>
+                                    <button onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-white">
+                                        <i className="fa-solid fa-xmark text-lg"></i>
+                                    </button>
+                                </div>
+
+                                {/* Toggle Jenis Transaksi */}
+                                <div className="grid grid-cols-3 gap-1 bg-dark-lighter p-1 rounded-xl">
+                                    <button 
+                                        type="button"
+                                        onClick={() => setTxType('expense')}
+                                        className={`py-1.5 rounded-lg text-xs font-bold transition ${txType === 'expense' ? 'bg-red-500 text-white' : 'text-slate-400'}`}
+                                    >
+                                        Pengeluaran
+                                    </button>
+                                    <button 
+                                        type="button"
+                                        onClick={() => setTxType('income')}
+                                        className={`py-1.5 rounded-lg text-xs font-bold transition ${txType === 'income' ? 'bg-emerald-500 text-white' : 'text-slate-400'}`}
+                                    >
+                                        Pemasukan
+                                    </button>
+                                    <button 
+                                        type="button"
+                                        onClick={() => setTxType('transfer')}
+                                        className={`py-1.5 rounded-lg text-xs font-bold transition ${txType === 'transfer' ? 'bg-blue-500 text-white' : 'text-slate-400'}`}
+                                    >
+                                        Transfer
+                                    </button>
+                                </div>
+
+                                <form onSubmit={handleAddTransaction} className="space-y-3">
+                                    <div>
+                                        <label className="text-[11px] font-semibold text-slate-400 block mb-1">Nominal (Rp)</label>
+                                        <input 
+                                            type="number" 
+                                            placeholder="0"
+                                            value={amount} 
+                                            onChange={e => setAmount(e.target.value)}
+                                            className="w-full bg-dark-lighter border border-dark-border rounded-xl px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-gold-500 font-bold"
+                                            required
+                                        />
+                                    </div>
+
+                                    {txType !== 'transfer' && (
+                                        <div>
+                                            <label className="text-[11px] font-semibold text-slate-400 block mb-1">Kategori</label>
+                                            <select 
+                                                value={category} 
+                                                onChange={e => setCategory(e.target.value)}
+                                                className="w-full bg-dark-lighter border border-dark-border rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-gold-500"
+                                            >
+                                                {CATEGORIES[txType].map(cat => (
+                                                    <option key={cat} value={cat}>{cat}</option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                    )}
+
+                                    {/* Pemilihan Akun / Rekening */}
+                                    <div className="grid grid-cols-2 gap-2">
+                                        {(txType === 'expense' || txType === 'transfer') && (
+                                            <div>
+                                                <label className="text-[11px] font-semibold text-slate-400 block mb-1">Dari Akun</label>
+                                                <select 
+                                                    value={fromAcc} 
+                                                    onChange={e => setFromAcc(e.target.value)}
+                                                    className="w-full bg-dark-lighter border border-dark-border rounded-xl px-2.5 py-2 text-xs text-slate-100 focus:outline-none focus:border-gold-500"
+                                                >
+                                                    {accounts.map(acc => (
+                                                        <option key={acc.id} value={acc.id}>{acc.name}</option>
+                                                    ))}
+                                                </select>
+                                            </div>
+                                        )}
+
+                                        {(txType === 'income' || txType === 'transfer') && (
+                                            <div>
+                                                <label className="text-[11px] font-semibold text-slate-400 block mb-1">Ke Akun</label>
+                                                <select 
+                                                    value={toAcc} 
+                                                    onChange={e => setToAcc(e.target.value)}
+                                                    className="w-full bg-dark-lighter border border-dark-border rounded-xl px-2.5 py-2 text-xs text-slate-100 focus:outline-none focus:border-gold-500"
+                                                >
+                                                    {accounts.map(acc => (
+                                                        <option key={acc.id} value={acc.id}>{acc.name}</option>
+                                                    ))}
+                                                </select>
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    <div>
+                                        <label className="text-[11px] font-semibold text-slate-400 block mb-1">Catatan / Keterangan</label>
+                                        <input 
+                                            type="text" 
+                                            placeholder="Contoh: Beli makan siang"
+                                            value={note} 
+                                            onChange={e => setNote(e.target.value)}
+                                            className="w-full bg-dark-lighter border border-dark-border rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-gold-500"
+                                        />
+                                    </div>
+
+                                    <button 
+                                        type="submit"
+                                        className="w-full py-3 gold-gradient-bg text-slate-950 font-bold rounded-xl text-xs hover:opacity-95 transition mt-2"
+                                    >
+                                        Simpan Transaksi
+                                    </button>
+                                </form>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* MODAL TAMBAH AKUN BARU */}
+                    {isAccModalOpen && (
+                        <div className="absolute inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+                            <div className="bg-dark-card w-full max-w-md rounded-2xl border border-dark-border p-5 space-y-4">
+                                <div className="flex justify-between items-center border-b border-dark-border pb-3">
+                                    <h3 className="text-sm font-bold text-slate-100">Tambah Akun / Rekening</h3>
+                                    <button onClick={() => setIsAccModalOpen(false)} className="text-slate-400 hover:text-white">
+                                        <i className="fa-solid fa-xmark text-lg"></i>
+                                    </button>
+                                </div>
+
+                                <form onSubmit={handleAddAccount} className="space-y-3">
+                                    <div>
+                                        <label className="text-[11px] font-semibold text-slate-400 block mb-1">Nama Akun / Bank</label>
+                                        <input 
+                                            type="text" 
+                                            placeholder="Contoh: Bank Mandiri / E-Wallet"
+                                            value={newAccName} 
+                                            onChange={e => setNewAccName(e.target.value)}
+                                            className="w-full bg-dark-lighter border border-dark-border rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-gold-500"
+                                            required
+                                        />
+                                    </div>
+
+                                    <div>
+                                        <label className="text-[11px] font-semibold text-slate-400 block mb-1">Tipe Aset</label>
+                                        <select 
+                                            value={newAccType} 
+                                            onChange={e => setNewAccType(e.target.value)}
+                                            className="w-full bg-dark-lighter border border-dark-border rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-gold-500"
+                                        >
+                                            <option value="bank">Bank / Rekening</option>
+                                            <option value="cash">Cash / Tunai</option>
+                                            <option value="reksadana">Reksa Dana</option>
+                                            <option value="investment">Saham / Crypto</option>
+                                        </select>
+                                    </div>
+
+                                    <div>
+                                        <label className="text-[11px] font-semibold text-slate-400 block mb-1">Saldo Awal (Rp)</label>
+                                        <input 
+                                            type="number" 
+                                            placeholder="0"
+                                            value={newAccBalance} 
+                                            onChange={e => setNewAccBalance(e.target.value)}
+                                            className="w-full bg-dark-lighter border border-dark-border rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-gold-500"
+                                            required
+                                        />
+                                    </div>
+
+                                    <button 
+                                        type="submit"
+                                        className="w-full py-2.5 gold-gradient-bg text-slate-950 font-bold rounded-xl text-xs hover:opacity-95 transition"
+                                    >
+                                        Simpan Akun
+                                    </button>
+                                </form>
+                            </div>
+                        </div>
+                    )}
+
+                </div>
+            );
+        }
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
