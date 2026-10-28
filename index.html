@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Personal Finance Tracker</title>
+    <title>Personal Finance Tracker Pro</title>
     <!-- Tailwind CSS CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- Font Awesome Icons -->
@@ -76,8 +76,8 @@
         const { useState, useEffect } = React;
 
         const CATEGORIES = {
-            expense: ['Makanan & Minuman', 'Transportasi', 'Belanja', 'Tagihan & Utilitas', 'Hiburan', 'Kesehatan', 'Pendidikan', 'Lainnya'],
-            income: ['Gaji / Income', 'Bonus & Cashback', 'Hasil Investasi', 'Sampingan', 'Lainnya']
+            expense: ['Makanan & Minuman', 'Transportasi', 'Belanja & Groceries', 'Tagihan & Utilitas', 'Hiburan', 'Kesehatan', 'Pendidikan', 'Investasi / Tabungan', 'Lainnya'],
+            income: ['Gaji Utama', 'Bonus & Cashback', 'Hasil Investasi', 'Usaha Sampingan', 'Lainnya']
         };
 
         const ACCOUNT_TYPES = [
@@ -88,18 +88,54 @@
             { id: 'ewallet', name: 'E-Wallet', icon: 'fa-mobile-screen-button', color: 'bg-indigo-600' }
         ];
 
+        // Format Angka ke IDR Standard
         const formatIDR = (val) => {
             return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(val || 0);
         };
 
+        // Format Angka Ribuan saat Mengetik di Input (1000000 -> 1.000.000)
+        const formatInputNumber = (val) => {
+            if (!val) return '';
+            const raw = val.toString().replace(/\D/g, '');
+            return raw.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+        };
+
+        const parseRawNumber = (val) => {
+            if (!val) return 0;
+            return parseFloat(val.toString().replace(/\./g, '')) || 0;
+        };
+
+        // Helper Konversi Terbilang Angka Bahasa Indonesia
+        const terbilangIDR = (nilai) => {
+            const angka = Math.abs(parseRawNumber(nilai));
+            if (!angka) return '';
+            
+            const satuan = ['', 'Satu', 'Dua', 'Tiga', 'Empat', 'Lima', 'Enam', 'Tujuh', 'Delapan', 'Sembilan', 'Sepuluh', 'Sebelas'];
+            
+            const konversi = (n) => {
+                if (n < 12) return satuan[n];
+                if (n < 20) return konversi(n - 10) + ' Belas';
+                if (n < 100) return konversi(Math.floor(n / 10)) + ' Puluh ' + konversi(n % 10);
+                if (n < 200) return 'Seratus ' + konversi(n - 100);
+                if (n < 1000) return konversi(Math.floor(n / 100)) + ' Ratus ' + konversi(n % 100);
+                if (n < 2000) return 'Seribu ' + konversi(n - 1000);
+                if (n < 1000000) return konversi(Math.floor(n / 1000)) + ' Ribu ' + konversi(n % 1000);
+                if (n < 1000000000) return konversi(Math.floor(n / 1000000)) + ' Juta ' + konversi(n % 1000000);
+                if (n < 1000000000000) return konversi(Math.floor(n / 1000000000)) + ' Miliar ' + konversi(n % 1000000000);
+                return '';
+            };
+
+            return konversi(angka).trim() + ' Rupiah';
+        };
+
         function App() {
-            // Theme Mode
+            // Theme Mode State
             const [darkMode, setDarkMode] = useState(() => {
                 const savedTheme = localStorage.getItem('fin_theme');
                 return savedTheme ? savedTheme === 'dark' : true;
             });
 
-            // Pure State Kosong Tanpa Dummy
+            // LocalStorage Core Data
             const [accounts, setAccounts] = useState(() => {
                 const saved = localStorage.getItem('fin_p_accounts');
                 return saved ? JSON.parse(saved) : [];
@@ -110,32 +146,49 @@
                 return saved ? JSON.parse(saved) : [];
             });
 
+            const [goals, setGoals] = useState(() => {
+                const saved = localStorage.getItem('fin_p_goals');
+                return saved ? JSON.parse(saved) : [];
+            });
+
             // Navigation & Modal States
-            const [activeTab, setActiveTab] = useState('dashboard'); // 'dashboard', 'transactions', 'accounts', 'analytics'
+            const [activeTab, setActiveTab] = useState('dashboard'); // 'dashboard', 'transactions', 'accounts', 'goals', 'analytics'
             const [isTxModalOpen, setIsTxModalOpen] = useState(false);
             const [isAccModalOpen, setIsAccModalOpen] = useState(false);
+            const [isGoalModalOpen, setIsGoalModalOpen] = useState(false);
             
-            // Voice & OCR States
+            // Smart OCR & Voice Input States
             const [isListening, setIsListening] = useState(false);
             const [isScanning, setIsScanning] = useState(false);
             const [ocrProgress, setOcrProgress] = useState(0);
             const [voiceFeedback, setVoiceFeedback] = useState('');
 
-            // Form Transaction State
-            const [txType, setTxType] = useState('expense'); // 'expense', 'income', 'transfer'
-            const [amount, setAmount] = useState('');
+            // Transaction Form State (Formatted IDR String Input)
+            const [txType, setTxType] = useState('expense');
+            const [formattedAmount, setFormattedAmount] = useState('');
             const [category, setCategory] = useState(CATEGORIES.expense[0]);
             const [fromAcc, setFromAcc] = useState('');
             const [toAcc, setToAcc] = useState('');
             const [note, setNote] = useState('');
             const [searchQuery, setSearchQuery] = useState('');
 
-            // Form Account State
+            // Account Form State
             const [newAccName, setNewAccName] = useState('');
             const [newAccType, setNewAccType] = useState('bank');
-            const [newAccBalance, setNewAccBalance] = useState('');
+            const [newFormattedBalance, setNewFormattedBalance] = useState('');
 
-            // Theme Syncing
+            // Goal Form State
+            const [newGoalTitle, setNewGoalTitle] = useState('');
+            const [newGoalTargetFormatted, setNewGoalTargetFormatted] = useState('');
+            const [newGoalCurrentFormatted, setNewGoalCurrentFormatted] = useState('');
+
+            // Investment Calc State
+            const [calcInitial, setCalcInitial] = useState('1.000.000');
+            const [calcMonthly, setCalcMonthly] = useState('500.000');
+            const [calcYield, setCalcYield] = useState('8');
+            const [calcYears, setCalcYears] = useState('5');
+
+            // Theme Effect
             useEffect(() => {
                 const root = document.documentElement;
                 if (darkMode) {
@@ -147,7 +200,7 @@
                 }
             }, [darkMode]);
 
-            // Save to LocalStorage
+            // Save Data Effect
             useEffect(() => {
                 localStorage.setItem('fin_p_accounts', JSON.stringify(accounts));
             }, [accounts]);
@@ -156,18 +209,28 @@
                 localStorage.setItem('fin_p_transactions', JSON.stringify(transactions));
             }, [transactions]);
 
-            // Hitung Total Aset
+            useEffect(() => {
+                localStorage.setItem('fin_p_goals', JSON.stringify(goals));
+            }, [goals]);
+
+            // Asset Calculations
             const totalNetWorth = accounts.reduce((acc, curr) => acc + Number(curr.balance), 0);
             const totalLiquid = accounts.filter(a => a.type === 'bank' || a.type === 'cash' || a.type === 'ewallet').reduce((acc, curr) => acc + Number(curr.balance), 0);
             const totalInvest = accounts.filter(a => a.type === 'reksadana' || a.type === 'investment').reduce((acc, curr) => acc + Number(curr.balance), 0);
 
-            // Tambah Transaksi & Saldo Auto Sync
+            // Handler Input Formatted Number
+            const handleAmountChange = (e, setter) => {
+                const formatted = formatInputNumber(e.target.value);
+                setter(formatted);
+            };
+
+            // Tambah Transaksi & Auto Update Saldo Akun
             const handleAddTransaction = (e) => {
                 e?.preventDefault();
-                const numAmount = parseFloat(amount);
+                const numAmount = parseRawNumber(formattedAmount);
 
-                if (isNaN(numAmount) || numAmount <= 0) {
-                    alert('Masukkan nominal angka yang valid!');
+                if (numAmount <= 0) {
+                    alert('Masukkan nominal angka transaksi yang valid!');
                     return;
                 }
 
@@ -178,6 +241,11 @@
 
                 if ((txType === 'income' || txType === 'transfer') && !toAcc) {
                     alert('Pilih akun tujuan!');
+                    return;
+                }
+
+                if (txType === 'transfer' && fromAcc === toAcc) {
+                    alert('Akun asal dan akun tujuan tidak boleh sama!');
                     return;
                 }
 
@@ -192,7 +260,7 @@
                     note: note || (txType === 'transfer' ? 'Transfer Antar Akun' : category)
                 };
 
-                // Update saldo akun
+                // Sync Saldo Akun
                 const updatedAccounts = accounts.map(acc => {
                     let balance = Number(acc.balance);
                     if (txType === 'expense' && acc.id === fromAcc) balance -= numAmount;
@@ -206,7 +274,7 @@
 
                 setAccounts(updatedAccounts);
                 setTransactions([newTx, ...transactions]);
-                setAmount('');
+                setFormattedAmount('');
                 setNote('');
                 setIsTxModalOpen(false);
             };
@@ -221,18 +289,45 @@
                     id: 'acc-' + Date.now(),
                     name: newAccName,
                     type: newAccType,
-                    balance: parseFloat(newAccBalance) || 0,
+                    balance: parseRawNumber(newNewAccBalance => newAccBalance) || parseRawNumber(newFormattedBalance),
                     icon: selectedTypeObj?.icon || 'fa-wallet',
                     color: selectedTypeObj?.color || 'bg-slate-600'
                 };
 
                 setAccounts([...accounts, newAccount]);
                 setNewAccName('');
-                setNewAccBalance('');
+                setNewFormattedBalance('');
                 setIsAccModalOpen(false);
             };
 
-            // Hapus Transaksi & Kembalikan Saldo
+            // Tambah Financial Goal
+            const handleAddGoal = (e) => {
+                e.preventDefault();
+                if (!newGoalTitle.trim()) return;
+
+                const targetNum = parseRawNumber(newGoalTargetFormatted);
+                const currentNum = parseRawNumber(newGoalCurrentFormatted);
+
+                if (targetNum <= 0) {
+                    alert('Target nominal harus lebih dari 0!');
+                    return;
+                }
+
+                const newGoal = {
+                    id: 'goal-' + Date.now(),
+                    title: newGoalTitle,
+                    targetAmount: targetNum,
+                    currentAmount: currentNum
+                };
+
+                setGoals([...goals, newGoal]);
+                setNewGoalTitle('');
+                setNewGoalTargetFormatted('');
+                setNewGoalCurrentFormatted('');
+                setIsGoalModalOpen(false);
+            };
+
+            // Hapus Transaksi & Revert Saldo
             const handleDeleteTransaction = (id) => {
                 const tx = transactions.find(t => t.id === id);
                 if (!tx) return;
@@ -252,7 +347,11 @@
                 setTransactions(transactions.filter(t => t.id !== id));
             };
 
-            // Real Client-Side OCR Struk (Tesseract.js)
+            const handleDeleteGoal = (id) => {
+                setGoals(goals.filter(g => g.id !== id));
+            };
+
+            // Client OCR Struk Real
             const handleImageScanReal = (e) => {
                 const file = e.target.files[0];
                 if (!file) return;
@@ -272,8 +371,6 @@
                     }
                 ).then(({ data: { text } }) => {
                     setIsScanning(false);
-                    
-                    // Parse Angka Terbesar / Total dari Hasil Teks
                     const cleanText = text.toLowerCase();
                     const numberMatches = text.match(/\b\d{1,3}(?:[.,]\d{3})*(?:[.,]\d{2})?\b/g);
                     
@@ -286,19 +383,19 @@
                     }
 
                     setTxType('expense');
-                    setAmount(detectedAmount ? detectedAmount.toString() : '');
+                    setFormattedAmount(formatInputNumber(detectedAmount));
                     setNote(cleanText.slice(0, 30) || 'Scan Struk OCR');
                     setIsTxModalOpen(true);
                 }).catch(err => {
                     setIsScanning(false);
-                    alert('Gagal membaca gambar struk. Coba foto yang lebih jelas.');
+                    alert('Gagal mengurai teks dari struk. Coba foto yang lebih terang.');
                 });
             };
 
-            // Input Suara (Web Speech API)
+            // Smart Indonesian Voice Speech Parser
             const handleVoiceInput = () => {
                 if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
-                    alert('Browser anda tidak mendukung fitur pengenalan suara.');
+                    alert('Browser anda belum mendukung pengenal suara.');
                     return;
                 }
 
@@ -308,19 +405,30 @@
                 recognition.continuous = false;
 
                 setIsListening(true);
-                setVoiceFeedback('Mendengarkan... (Contoh: Beli makan 25000)');
+                setVoiceFeedback('Mendengarkan... (Contoh: "Beli makan 50 ribu dari cash")');
 
                 recognition.onresult = (event) => {
                     const text = event.results[0][0].transcript.toLowerCase();
                     setVoiceFeedback(`Terdengar: "${text}"`);
                     
-                    // Extract Angka
-                    const numbers = text.match(/\d+/g);
-                    if (numbers) {
-                        setAmount(numbers.join(''));
+                    let parsedNominal = 0;
+                    // Detect "juta" or "ribu" words
+                    if (text.includes('juta')) {
+                        const match = text.match(/(\d+)\s*juta/);
+                        if (match) parsedNominal = parseInt(match[1], 10) * 1000000;
+                    } else if (text.includes('ribu')) {
+                        const match = text.match(/(\d+)\s*ribu/);
+                        if (match) parsedNominal = parseInt(match[1], 10) * 1000;
+                    } else {
+                        const numbers = text.match(/\d+/g);
+                        if (numbers) parsedNominal = parseInt(numbers.join(''), 10);
                     }
 
-                    if (text.includes('dapat') || text.includes('gaji') || text.includes('pemasukan')) {
+                    if (parsedNominal > 0) {
+                        setFormattedAmount(formatInputNumber(parsedNominal));
+                    }
+
+                    if (text.includes('gaji') || text.includes('dapat') || text.includes('masuk')) {
                         setTxType('income');
                     } else if (text.includes('transfer') || text.includes('pindah')) {
                         setTxType('transfer');
@@ -328,7 +436,6 @@
                         setTxType('expense');
                     }
 
-                    // Matching Akun Asal
                     accounts.forEach(acc => {
                         if (text.includes(acc.name.toLowerCase())) {
                             setFromAcc(acc.id);
@@ -345,9 +452,9 @@
                 recognition.start();
             };
 
-            // Export & Import Data Backup
+            // Backup & Restore Export JSON
             const handleExportData = () => {
-                const dataStr = JSON.stringify({ accounts, transactions }, null, 2);
+                const dataStr = JSON.stringify({ accounts, transactions, goals }, null, 2);
                 const blob = new Blob([dataStr], { type: 'application/json' });
                 const url = URL.createObjectURL(blob);
                 const a = document.createElement('a');
@@ -366,25 +473,52 @@
                         if (Array.isArray(parsed.accounts) && Array.isArray(parsed.transactions)) {
                             setAccounts(parsed.accounts);
                             setTransactions(parsed.transactions);
-                            alert('Data berhasil di-import!');
+                            if (Array.isArray(parsed.goals)) setGoals(parsed.goals);
+                            alert('Data berhasil dipulihkan!');
                         }
                     } catch (err) {
-                        alert('Format file JSON tidak valid!');
+                        alert('Format file JSON tidak sah!');
                     }
                 };
                 reader.readAsText(file);
             };
 
             const handleResetAllData = () => {
-                if (confirm('Apakah kamu yakin ingin menghapus SELURUH data akun & transaksi? Data akan kembali ke 0.')) {
+                if (confirm('Yakin ingin mengosongkan SELURUH data keuangan? Data tidak bisa dikembalikan.')) {
                     setAccounts([]);
                     setTransactions([]);
+                    setGoals([]);
                     localStorage.removeItem('fin_p_accounts');
                     localStorage.removeItem('fin_p_transactions');
+                    localStorage.removeItem('fin_p_goals');
                 }
             };
 
-            // Filter Transaksi
+            // Hitung Simulasi Return Investasi
+            const calculateInvestment = () => {
+                const P = parseRawNumber(calcInitial);
+                const PMT = parseRawNumber(calcMonthly);
+                const r = (parseFloat(calcYield) || 0) / 100 / 12;
+                const n = (parseFloat(calcYears) || 0) * 12;
+
+                let futureValue = P * Math.pow(1 + r, n);
+                for (let i = 1; i <= n; i++) {
+                    futureValue += PMT * Math.pow(1 + r, n - i);
+                }
+
+                const totalModal = P + (PMT * n);
+                const totalProfit = Math.max(0, futureValue - totalModal);
+
+                return {
+                    futureValue: Math.round(futureValue),
+                    totalModal: Math.round(totalModal),
+                    totalProfit: Math.round(totalProfit)
+                };
+            };
+
+            const invResult = calculateInvestment();
+
+            // Filter Transactions
             const filteredTransactions = transactions.filter(t => 
                 t.note.toLowerCase().includes(searchQuery.toLowerCase()) || 
                 t.category.toLowerCase().includes(searchQuery.toLowerCase())
@@ -397,48 +531,47 @@
                     <div className="px-5 pt-5 pb-3 bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 flex justify-between items-center z-10">
                         <div className="flex items-center space-x-3">
                             <div className="w-9 h-9 rounded-xl gold-gradient flex items-center justify-center font-bold text-slate-950 shadow-md">
-                                <i className="fa-solid fa-wallet text-sm"></i>
+                                <i className="fa-solid fa-vault text-sm"></i>
                             </div>
                             <div>
-                                <h1 className="text-sm font-bold tracking-tight">Finance App</h1>
-                                <p className="text-[10px] text-slate-500 dark:text-slate-400 font-medium">Personal Asset Tracker</p>
+                                <h1 className="text-sm font-bold tracking-tight">Finance Pro</h1>
+                                <p className="text-[10px] text-slate-500 dark:text-slate-400 font-medium">Personal Finance Manager</p>
                             </div>
                         </div>
 
                         <div className="flex items-center space-x-2">
-                            {/* Toggle Theme Button */}
+                            {/* Toggle Mode Gelap / Terang */}
                             <button 
                                 onClick={() => setDarkMode(!darkMode)}
                                 className="w-8 h-8 rounded-lg bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-gold-400 flex items-center justify-center transition"
-                                title="Toggle Mode Terang/Gelap"
+                                title="Mode Terang / Gelap"
                             >
                                 <i className={`fa-solid ${darkMode ? 'fa-sun' : 'fa-moon'} text-xs`}></i>
                             </button>
                             
-                            {/* Backup Options */}
-                            <button onClick={handleExportData} className="w-8 h-8 rounded-lg bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-300 flex items-center justify-center text-xs">
+                            <button onClick={handleExportData} className="w-8 h-8 rounded-lg bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-300 flex items-center justify-center text-xs" title="Backup JSON">
                                 <i className="fa-solid fa-download"></i>
                             </button>
-                            <label className="w-8 h-8 rounded-lg bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-300 flex items-center justify-center text-xs cursor-pointer">
+                            <label className="w-8 h-8 rounded-lg bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-300 flex items-center justify-center text-xs cursor-pointer" title="Restore JSON">
                                 <i className="fa-solid fa-upload"></i>
                                 <input type="file" accept=".json" onChange={handleImportData} className="hidden" />
                             </label>
-                            <button onClick={handleResetAllData} className="w-8 h-8 rounded-lg bg-red-500/10 text-red-500 flex items-center justify-center text-xs" title="Reset Data">
+                            <button onClick={handleResetAllData} className="w-8 h-8 rounded-lg bg-red-500/10 text-red-500 flex items-center justify-center text-xs" title="Reset All Data">
                                 <i className="fa-solid fa-trash"></i>
                             </button>
                         </div>
                     </div>
 
-                    {/* App Main Body Viewport */}
+                    {/* App Main Viewport */}
                     <div className="flex-1 overflow-y-auto px-4 py-4 space-y-5 pb-24">
 
                         {/* TAB 1: DASHBOARD */}
                         {activeTab === 'dashboard' && (
                             <>
-                                {/* Net Worth Card */}
+                                {/* Net Worth Gold Card */}
                                 <div className="gold-gradient p-5 rounded-2xl text-slate-950 shadow-xl gold-border-glow relative overflow-hidden">
                                     <div className="absolute -right-6 -bottom-6 opacity-15 text-9xl">
-                                        <i className="fa-solid fa-vault"></i>
+                                        <i className="fa-solid fa-coins"></i>
                                     </div>
                                     <p className="text-xs font-bold uppercase tracking-wider text-slate-900/80">Total Kekayaan (Net Worth)</p>
                                     <h2 className="text-2xl font-black mt-1 tracking-tight">
@@ -466,7 +599,7 @@
                                         }`}
                                     >
                                         <i className="fa-solid fa-microphone text-gold-500"></i>
-                                        <span>{isListening ? 'Mendengarkan...' : 'Suara (Mic)'}</span>
+                                        <span>{isListening ? 'Mendengarkan...' : 'Input Voice'}</span>
                                     </button>
 
                                     <label className="flex-1 flex items-center justify-center gap-2 py-2 px-3 rounded-lg bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-200 text-xs font-semibold cursor-pointer transition">
@@ -483,7 +616,7 @@
                                 {/* Summary Accounts Section */}
                                 <div>
                                     <div className="flex justify-between items-center mb-2.5">
-                                        <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400">Daftar Akun / Rekening</h3>
+                                        <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400">Daftar Rekening & Aset</h3>
                                         <button onClick={() => setIsAccModalOpen(true)} className="text-xs font-bold text-gold-500 hover:underline">
                                             + Tambah Akun
                                         </button>
@@ -492,7 +625,7 @@
                                     {accounts.length === 0 ? (
                                         <div className="bg-slate-50 dark:bg-slate-800/40 p-6 rounded-xl border border-dashed border-slate-300 dark:border-slate-800 text-center space-y-2">
                                             <i className="fa-solid fa-wallet text-2xl text-slate-400"></i>
-                                            <p className="text-xs text-slate-500">Belum ada akun. Klik "+ Tambah Akun" untuk mulai dari 0.</p>
+                                            <p className="text-xs text-slate-500">Belum ada akun. Klik "+ Tambah Akun" untuk menambahkan Rekening / Reksa Dana / Cash.</p>
                                         </div>
                                     ) : (
                                         <div className="grid grid-cols-2 gap-2.5">
@@ -561,19 +694,19 @@
                         {activeTab === 'transactions' && (
                             <div className="space-y-3">
                                 <div className="flex justify-between items-center">
-                                    <h3 className="text-sm font-bold">Semua Transaksi</h3>
+                                    <h3 className="text-sm font-bold">Semua Riwayat Transaksi</h3>
                                 </div>
 
                                 <input 
                                     type="text"
-                                    placeholder="Cari transaksi..."
+                                    placeholder="Cari transaksi atau kategori..."
                                     value={searchQuery}
                                     onChange={e => setSearchQuery(e.target.value)}
                                     className="w-full bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs focus:outline-none"
                                 />
 
                                 {filteredTransactions.length === 0 ? (
-                                    <p className="text-xs text-slate-400 text-center py-8">Tidak ada transaksi ditemukan.</p>
+                                    <p className="text-xs text-slate-400 text-center py-8">Tidak ada catatan ditemukan.</p>
                                 ) : (
                                     filteredTransactions.map(tx => (
                                         <div key={tx.id} className="bg-white dark:bg-slate-800/80 p-3 rounded-xl border border-slate-200 dark:border-slate-800 flex items-center justify-between">
@@ -612,9 +745,9 @@
                         {activeTab === 'accounts' && (
                             <div className="space-y-3">
                                 <div className="flex justify-between items-center mb-2">
-                                    <h3 className="text-sm font-bold">Kelola Akun Keuangan</h3>
+                                    <h3 className="text-sm font-bold">Daftar Akun Keuangan</h3>
                                     <button onClick={() => setIsAccModalOpen(true)} className="text-xs font-bold bg-gold-500 text-slate-950 px-3 py-1.5 rounded-lg">
-                                        + Akun
+                                        + Akun Baru
                                     </button>
                                 </div>
 
@@ -635,13 +768,54 @@
                             </div>
                         )}
 
-                        {/* TAB 4: ANALISIS */}
+                        {/* TAB 4: GOALS / TARGET TABUNGAN */}
+                        {activeTab === 'goals' && (
+                            <div className="space-y-3">
+                                <div className="flex justify-between items-center mb-2">
+                                    <h3 className="text-sm font-bold">Target Tabungan & Impian</h3>
+                                    <button onClick={() => setIsGoalModalOpen(true)} className="text-xs font-bold bg-gold-500 text-slate-950 px-3 py-1.5 rounded-lg">
+                                        + Target Baru
+                                    </button>
+                                </div>
+
+                                {goals.length === 0 ? (
+                                    <div className="bg-slate-50 dark:bg-slate-800/40 p-6 rounded-xl border border-dashed border-slate-300 dark:border-slate-800 text-center space-y-2">
+                                        <i className="fa-solid fa-bullseye text-2xl text-slate-400"></i>
+                                        <p className="text-xs text-slate-500">Belum ada target tabungan. Buat target impianmu seperti "Beli Laptop" atau "Dana Darurat".</p>
+                                    </div>
+                                ) : (
+                                    goals.map(g => {
+                                        const pct = Math.min(100, Math.round((g.currentAmount / g.targetAmount) * 100));
+                                        return (
+                                            <div key={g.id} className="bg-white dark:bg-slate-800/80 p-4 rounded-xl border border-slate-200 dark:border-slate-800 space-y-2">
+                                                <div className="flex justify-between items-center">
+                                                    <h4 className="text-xs font-bold">{g.title}</h4>
+                                                    <button onClick={() => handleDeleteGoal(g.id)} className="text-slate-400 hover:text-red-500 text-xs">
+                                                        <i className="fa-solid fa-trash-can"></i>
+                                                    </button>
+                                                </div>
+                                                <div className="flex justify-between items-center text-xs">
+                                                    <span className="text-slate-400">{formatIDR(g.currentAmount)} / {formatIDR(g.targetAmount)}</span>
+                                                    <span className="font-bold text-gold-500">{pct}%</span>
+                                                </div>
+                                                <div className="w-full h-2 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden">
+                                                    <div className="h-full gold-gradient rounded-full transition-all duration-300" style={{ width: `${pct}%` }}></div>
+                                                </div>
+                                            </div>
+                                        );
+                                    })
+                                )}
+                            </div>
+                        )}
+
+                        {/* TAB 5: ANALISIS & KALKULATOR INVESTASI */}
                         {activeTab === 'analytics' && (
                             <div className="space-y-4">
-                                <h3 className="text-sm font-bold">Analisis Alokasi Aset</h3>
+                                {/* Alokasi Aset Breakdown */}
                                 <div className="bg-white dark:bg-slate-800/80 p-4 rounded-xl border border-slate-200 dark:border-slate-800 space-y-3">
+                                    <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400">Alokasi Portofolio Aset</h3>
                                     {accounts.length === 0 ? (
-                                        <p className="text-xs text-slate-400 text-center py-4">Belum ada data alokasi.</p>
+                                        <p className="text-xs text-slate-400 text-center py-2">Belum ada data alokasi.</p>
                                     ) : (
                                         accounts.map(acc => {
                                             const pct = totalNetWorth > 0 ? Math.round((acc.balance / totalNetWorth) * 100) : 0;
@@ -659,24 +833,63 @@
                                         })
                                     )}
                                 </div>
+
+                                {/* Simulator Return Investasi (CAGR) */}
+                                <div className="bg-white dark:bg-slate-800/80 p-4 rounded-xl border border-slate-200 dark:border-slate-800 space-y-3">
+                                    <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400">Kalkulator Simulator Investasi</h3>
+
+                                    <div className="grid grid-cols-2 gap-2 text-xs">
+                                        <div>
+                                            <label className="text-[10px] text-slate-400 block mb-1">Modal Awal (Rp)</label>
+                                            <input type="text" value={calcInitial} onChange={e => handleAmountChange(e, setCalcInitial)} className="w-full bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-2 font-semibold" />
+                                        </div>
+                                        <div>
+                                            <label className="text-[10px] text-slate-400 block mb-1">Topup Bulanan (Rp)</label>
+                                            <input type="text" value={calcMonthly} onChange={e => handleAmountChange(e, setCalcMonthly)} className="w-full bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-2 font-semibold" />
+                                        </div>
+                                        <div>
+                                            <label className="text-[10px] text-slate-400 block mb-1">Return Pertahun (%)</label>
+                                            <input type="number" value={calcYield} onChange={e => setCalcYield(e.target.value)} className="w-full bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-2 font-semibold" />
+                                        </div>
+                                        <div>
+                                            <label className="text-[10px] text-slate-400 block mb-1">Jangka Waktu (Tahun)</label>
+                                            <input type="number" value={calcYears} onChange={e => setCalcYears(e.target.value)} className="w-full bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-2 font-semibold" />
+                                        </div>
+                                    </div>
+
+                                    <div className="bg-slate-50 dark:bg-slate-900 p-3 rounded-xl border border-slate-200 dark:border-slate-800 space-y-2 mt-2">
+                                        <div className="flex justify-between text-xs">
+                                            <span className="text-slate-400">Total Modal</span>
+                                            <span className="font-semibold">{formatIDR(invResult.totalModal)}</span>
+                                        </div>
+                                        <div className="flex justify-between text-xs">
+                                            <span className="text-slate-400">Estimasi Keuntungan</span>
+                                            <span className="font-semibold text-emerald-500">+{formatIDR(invResult.totalProfit)}</span>
+                                        </div>
+                                        <div className="flex justify-between text-xs border-t border-slate-200 dark:border-slate-800 pt-2 font-bold">
+                                            <span>Estimasi Hasil Akhir</span>
+                                            <span className="text-gold-500">{formatIDR(invResult.futureValue)}</span>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
                         )}
 
                     </div>
 
-                    {/* Floating Add Transaction Button */}
+                    {/* Floating Plus Button */}
                     <div className="absolute bottom-20 right-5 z-20">
                         <button 
                             onClick={() => setIsTxModalOpen(true)}
-                            className="w-13 h-13 rounded-full gold-gradient text-slate-950 font-bold flex items-center justify-center shadow-xl hover:scale-105 active:scale-95 transition"
+                            className="rounded-full gold-gradient text-slate-950 font-bold flex items-center justify-center shadow-xl hover:scale-105 active:scale-95 transition"
                             style={{ width: '52px', height: '52px' }}
                         >
                             <i className="fa-solid fa-plus text-xl"></i>
                         </button>
                     </div>
 
-                    {/* Navigation Bar Bottom Mobile */}
-                    <div className="absolute bottom-0 left-0 right-0 bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 px-6 py-2.5 flex justify-between items-center z-10">
+                    {/* Bottom Mobile Navigation */}
+                    <div className="absolute bottom-0 left-0 right-0 bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 px-4 py-2 flex justify-between items-center z-10">
                         <button onClick={() => setActiveTab('dashboard')} className={`flex flex-col items-center space-y-1 ${activeTab === 'dashboard' ? 'text-gold-500 font-bold' : 'text-slate-400'}`}>
                             <i className="fa-solid fa-house text-base"></i>
                             <span className="text-[9px]">Home</span>
@@ -689,33 +902,54 @@
                             <i className="fa-solid fa-wallet text-base"></i>
                             <span className="text-[9px]">Aset</span>
                         </button>
+                        <button onClick={() => setActiveTab('goals')} className={`flex flex-col items-center space-y-1 ${activeTab === 'goals' ? 'text-gold-500 font-bold' : 'text-slate-400'}`}>
+                            <i className="fa-solid fa-bullseye text-base"></i>
+                            <span className="text-[9px]">Target</span>
+                        </button>
                         <button onClick={() => setActiveTab('analytics')} className={`flex flex-col items-center space-y-1 ${activeTab === 'analytics' ? 'text-gold-500 font-bold' : 'text-slate-400'}`}>
                             <i className="fa-solid fa-chart-pie text-base"></i>
                             <span className="text-[9px]">Analisis</span>
                         </button>
                     </div>
 
-                    {/* MODAL TRANSAKSI */}
+                    {/* MODAL TRANSAKSI (Dengan Live Formatting & Terbilang Rupiah) */}
                     {isTxModalOpen && (
                         <div className="absolute inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
                             <div className="bg-white dark:bg-slate-900 w-full max-w-md rounded-t-2xl sm:rounded-2xl border border-slate-200 dark:border-slate-800 p-5 space-y-4">
                                 <div className="flex justify-between items-center border-b border-slate-200 dark:border-slate-800 pb-3">
-                                    <h3 className="text-sm font-bold">Tambah Transaksi</h3>
+                                    <h3 className="text-sm font-bold">Catat Transaksi Baru</h3>
                                     <button onClick={() => setIsTxModalOpen(false)} className="text-slate-400">
                                         <i className="fa-solid fa-xmark text-lg"></i>
                                     </button>
                                 </div>
 
                                 <div className="grid grid-cols-3 gap-1 bg-slate-100 dark:bg-slate-800 p-1 rounded-xl">
-                                    <button type="button" onClick={() => setTxType('expense')} className={`py-1 rounded-lg text-xs font-bold ${txType === 'expense' ? 'bg-red-500 text-white' : 'text-slate-400'}`}>Pengeluaran</button>
-                                    <button type="button" onClick={() => setTxType('income')} className={`py-1 rounded-lg text-xs font-bold ${txType === 'income' ? 'bg-emerald-500 text-white' : 'text-slate-400'}`}>Pemasukan</button>
-                                    <button type="button" onClick={() => setTxType('transfer')} className={`py-1 rounded-lg text-xs font-bold ${txType === 'transfer' ? 'bg-blue-500 text-white' : 'text-slate-400'}`}>Transfer</button>
+                                    <button type="button" onClick={() => setTxType('expense')} className={`py-1.5 rounded-lg text-xs font-bold ${txType === 'expense' ? 'bg-red-500 text-white' : 'text-slate-400'}`}>Pengeluaran</button>
+                                    <button type="button" onClick={() => setTxType('income')} className={`py-1.5 rounded-lg text-xs font-bold ${txType === 'income' ? 'bg-emerald-500 text-white' : 'text-slate-400'}`}>Pemasukan</button>
+                                    <button type="button" onClick={() => setTxType('transfer')} className={`py-1.5 rounded-lg text-xs font-bold ${txType === 'transfer' ? 'bg-blue-500 text-white' : 'text-slate-400'}`}>Transfer</button>
                                 </div>
 
                                 <form onSubmit={handleAddTransaction} className="space-y-3">
+                                    {/* Formatted Currency Input */}
                                     <div>
                                         <label className="text-[10px] font-semibold text-slate-400 block mb-1">Nominal (Rp)</label>
-                                        <input type="number" placeholder="0" value={amount} onChange={e => setAmount(e.target.value)} className="w-full bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-sm font-bold focus:outline-none" required />
+                                        <div className="relative">
+                                            <span className="absolute left-3 top-2.5 text-xs font-bold text-slate-400">Rp</span>
+                                            <input 
+                                                type="text" 
+                                                placeholder="0" 
+                                                value={formattedAmount} 
+                                                onChange={e => handleAmountChange(e, setFormattedAmount)} 
+                                                className="w-full bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl pl-9 pr-3 py-2 text-base font-bold text-gold-500 focus:outline-none" 
+                                                required 
+                                            />
+                                        </div>
+                                        {/* Live Indonesian Spell Spelling Helper */}
+                                        {formattedAmount && (
+                                            <p className="text-[11px] text-amber-500 font-semibold mt-1 italic">
+                                                {terbilangIDR(formattedAmount)}
+                                            </p>
+                                        )}
                                     </div>
 
                                     {txType !== 'transfer' && (
@@ -730,7 +964,7 @@
                                     <div className="grid grid-cols-2 gap-2">
                                         {(txType === 'expense' || txType === 'transfer') && (
                                             <div>
-                                                <label className="text-[10px] font-semibold text-slate-400 block mb-1">Dari Akun</label>
+                                                <label className="text-[10px] font-semibold text-slate-400 block mb-1">Dari Akun / Rekening</label>
                                                 <select value={fromAcc} onChange={e => setFromAcc(e.target.value)} className="w-full bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-2 py-2 text-xs focus:outline-none">
                                                     <option value="">-- Pilih --</option>
                                                     {accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
@@ -739,7 +973,7 @@
                                         )}
                                         {(txType === 'income' || txType === 'transfer') && (
                                             <div>
-                                                <label className="text-[10px] font-semibold text-slate-400 block mb-1">Ke Akun</label>
+                                                <label className="text-[10px] font-semibold text-slate-400 block mb-1">Ke Akun / Rekening</label>
                                                 <select value={toAcc} onChange={e => setToAcc(e.target.value)} className="w-full bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-2 py-2 text-xs focus:outline-none">
                                                     <option value="">-- Pilih --</option>
                                                     {accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
@@ -749,11 +983,11 @@
                                     </div>
 
                                     <div>
-                                        <label className="text-[10px] font-semibold text-slate-400 block mb-1">Catatan</label>
-                                        <input type="text" placeholder="Keterangan..." value={note} onChange={e => setNote(e.target.value)} className="w-full bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs focus:outline-none" />
+                                        <label className="text-[10px] font-semibold text-slate-400 block mb-1">Catatan / Keterangan</label>
+                                        <input type="text" placeholder="Keterangan transaksi..." value={note} onChange={e => setNote(e.target.value)} className="w-full bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs focus:outline-none" />
                                     </div>
 
-                                    <button type="submit" className="w-full py-2.5 gold-gradient text-slate-950 font-bold rounded-xl text-xs mt-2">Simpan</button>
+                                    <button type="submit" className="w-full py-2.5 gold-gradient text-slate-950 font-bold rounded-xl text-xs mt-2 shadow-md">Simpan Transaksi</button>
                                 </form>
                             </div>
                         </div>
@@ -764,7 +998,7 @@
                         <div className="absolute inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
                             <div className="bg-white dark:bg-slate-900 w-full max-w-md rounded-2xl border border-slate-200 dark:border-slate-800 p-5 space-y-4">
                                 <div className="flex justify-between items-center border-b border-slate-200 dark:border-slate-800 pb-3">
-                                    <h3 className="text-sm font-bold">Tambah Akun / Rekening</h3>
+                                    <h3 className="text-sm font-bold">Tambah Akun Keuangan</h3>
                                     <button onClick={() => setIsAccModalOpen(false)} className="text-slate-400">
                                         <i className="fa-solid fa-xmark text-lg"></i>
                                     </button>
@@ -772,7 +1006,7 @@
 
                                 <form onSubmit={handleAddAccount} className="space-y-3">
                                     <div>
-                                        <label className="text-[10px] font-semibold text-slate-400 block mb-1">Nama Akun (misal: BCA / Cash)</label>
+                                        <label className="text-[10px] font-semibold text-slate-400 block mb-1">Nama Akun (misal: BCA / Bibit / Cash)</label>
                                         <input type="text" placeholder="Nama Akun..." value={newAccName} onChange={e => setNewAccName(e.target.value)} className="w-full bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs focus:outline-none" required />
                                     </div>
 
@@ -785,10 +1019,53 @@
 
                                     <div>
                                         <label className="text-[10px] font-semibold text-slate-400 block mb-1">Saldo Awal (Rp)</label>
-                                        <input type="number" placeholder="0" value={newAccBalance} onChange={e => setNewAccBalance(e.target.value)} className="w-full bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs focus:outline-none" required />
+                                        <input type="text" placeholder="0" value={newFormattedBalance} onChange={e => handleAmountChange(e, setNewFormattedBalance)} className="w-full bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs focus:outline-none font-bold" required />
+                                        {newFormattedBalance && (
+                                            <p className="text-[11px] text-amber-500 font-semibold mt-1 italic">
+                                                {terbilangIDR(newFormattedBalance)}
+                                            </p>
+                                        )}
                                     </div>
 
                                     <button type="submit" className="w-full py-2.5 gold-gradient text-slate-950 font-bold rounded-xl text-xs">Simpan Akun</button>
+                                </form>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* MODAL TAMBAH TARGET TABUNGAN */}
+                    {isGoalModalOpen && (
+                        <div className="absolute inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+                            <div className="bg-white dark:bg-slate-900 w-full max-w-md rounded-2xl border border-slate-200 dark:border-slate-800 p-5 space-y-4">
+                                <div className="flex justify-between items-center border-b border-slate-200 dark:border-slate-800 pb-3">
+                                    <h3 className="text-sm font-bold">Tambah Target Tabungan</h3>
+                                    <button onClick={() => setIsGoalModalOpen(false)} className="text-slate-400">
+                                        <i className="fa-solid fa-xmark text-lg"></i>
+                                    </button>
+                                </div>
+
+                                <form onSubmit={handleAddGoal} className="space-y-3">
+                                    <div>
+                                        <label className="text-[10px] font-semibold text-slate-400 block mb-1">Judul Target (misal: Beli MacBook / Mobil)</label>
+                                        <input type="text" placeholder="Judul Target..." value={newGoalTitle} onChange={e => setNewGoalTitle(e.target.value)} className="w-full bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs focus:outline-none" required />
+                                    </div>
+
+                                    <div>
+                                        <label className="text-[10px] font-semibold text-slate-400 block mb-1">Target Nominal (Rp)</label>
+                                        <input type="text" placeholder="0" value={newGoalTargetFormatted} onChange={e => handleAmountChange(e, setNewGoalTargetFormatted)} className="w-full bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs focus:outline-none font-bold" required />
+                                        {newGoalTargetFormatted && (
+                                            <p className="text-[11px] text-amber-500 font-semibold mt-1 italic">
+                                                {terbilangIDR(newGoalTargetFormatted)}
+                                            </p>
+                                        )}
+                                    </div>
+
+                                    <div>
+                                        <label className="text-[10px] font-semibold text-slate-400 block mb-1">Tabungan Terkumpul Saat Ini (Rp)</label>
+                                        <input type="text" placeholder="0" value={newGoalCurrentFormatted} onChange={e => handleAmountChange(e, setNewGoalCurrentFormatted)} className="w-full bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs focus:outline-none font-bold" />
+                                    </div>
+
+                                    <button type="submit" className="w-full py-2.5 gold-gradient text-slate-950 font-bold rounded-xl text-xs">Simpan Target</button>
                                 </form>
                             </div>
                         </div>
