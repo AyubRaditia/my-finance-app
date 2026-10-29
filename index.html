@@ -32,7 +32,6 @@
   <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script src="https://unpkg.com/tesseract.js@v4.0.1/dist/tesseract.min.js"></script>
 
   <style>
@@ -63,7 +62,7 @@
   <div id="root"></div>
 
   <script type="text/babel">
-    const { useState, useEffect, useRef, useMemo } = React;
+    const { useState, useEffect, useMemo } = React;
 
     // Helper: Format Rupiah
     const formatIDR = (val) => {
@@ -104,7 +103,6 @@
         return localStorage.getItem('pft_hide_bal') === 'true';
       });
 
-      // KOSONG DARI AWAL
       const [accounts, setAccounts] = useState(() => {
         const saved = localStorage.getItem('pft_accounts');
         return saved ? JSON.parse(saved) : [];
@@ -120,7 +118,7 @@
         return saved ? JSON.parse(saved) : [];
       });
 
-      const [activeTab, setActiveTab] = useState('home'); // home, history, goals
+      const [activeTab, setActiveTab] = useState('home');
       const [isFormOpen, setIsFormOpen] = useState(false);
       const [isVoiceListening, setIsVoiceListening] = useState(false);
       const [voiceTranscript, setVoiceTranscript] = useState('');
@@ -147,7 +145,7 @@
       const [goalTarget, setGoalTarget] = useState('');
       const [goalSaved, setGoalSaved] = useState('');
 
-      // Deposit to Goal Modal State
+      // Deposit Goal Modal State
       const [selectedGoal, setSelectedGoal] = useState(null);
       const [goalDepositAmount, setGoalDepositAmount] = useState('');
       const [goalDepositAccId, setGoalDepositAccId] = useState('');
@@ -175,7 +173,7 @@
       }, [isDarkMode]);
 
       useEffect(() => {
-        localStorage.setItem('pft_hide_bal', hideBalance);
+        localStorage.setItem('pft_hide_bal', hideBalance ? 'true' : 'false');
       }, [hideBalance]);
 
       useEffect(() => {
@@ -184,12 +182,14 @@
         }
       });
 
-      // Total Net Worth
+      const toggleHideBalance = () => {
+        setHideBalance(prev => !prev);
+      };
+
       const totalNetWorth = useMemo(() => {
         return accounts.reduce((acc, curr) => acc + Number(curr.balance || 0), 0);
       }, [accounts]);
 
-      // Smart Voice Recognition Parser
       const startVoiceRecognition = () => {
         const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
         if (!SpeechRecognition) {
@@ -393,7 +393,6 @@
         setIsAccModalOpen(false);
       };
 
-      // FUNGSI HAPUS REKENING / ASET
       const handleDeleteAccount = (accId, accName, accBalance) => {
         const confirmMsg = `Apakah Anda yakin ingin menghapus rekening "${accName}"?\nSisa saldo saat ini: Rp ${formatIDR(accBalance)}`;
         if (confirm(confirmMsg)) {
@@ -546,10 +545,11 @@
                   <div className="flex items-center justify-between mb-2">
                     <span className="text-xs uppercase tracking-wider text-gray-400 font-medium">Total Kekayaan Bersih</span>
                     <button 
-                      onClick={() => setHideBalance(!hideBalance)} 
-                      className="text-gray-400 hover:text-white transition p-1 cursor-pointer"
+                      type="button"
+                      onClick={toggleHideBalance} 
+                      className="text-gray-300 hover:text-white transition p-2 rounded-xl bg-gray-800/60 active:scale-90"
                     >
-                      <i data-lucide={hideBalance ? "eye-off" : "eye"} className="w-4 h-4"></i>
+                      <i data-lucide={hideBalance ? "eye-off" : "eye"} className="w-5 h-5"></i>
                     </button>
                   </div>
 
@@ -610,7 +610,7 @@
                   </label>
                 </div>
 
-                {/* ACCOUNTS LIST WITH DELETE BUTTON */}
+                {/* ACCOUNTS LIST */}
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
                     <h2 className="text-sm font-bold text-gray-900 dark:text-gray-100 uppercase tracking-wider">Rekening & Aset</h2>
@@ -626,7 +626,7 @@
                   ) : (
                     <div className="space-y-2">
                       {accounts.map(acc => (
-                        <div key={acc.id} className="p-4 rounded-2xl bg-white dark:bg-gray-900 border border-gray-200/80 dark:border-gray-800 flex items-center justify-between shadow-sm group">
+                        <div key={acc.id} className="p-4 rounded-2xl bg-white dark:bg-gray-900 border border-gray-200/80 dark:border-gray-800 flex items-center justify-between shadow-sm">
                           <div className="flex items-center space-x-3">
                             <div className={`w-10 h-10 rounded-xl ${acc.color} text-white flex items-center justify-center shadow-md`}>
                               <i data-lucide={acc.type === 'Bank' ? 'landmark' : acc.type === 'Cash' ? 'wallet' : 'trending-up'} className="w-5 h-5"></i>
@@ -640,7 +640,7 @@
                           <div className="flex items-center space-x-3">
                             <div className="text-right">
                               <span className="text-sm font-bold text-gray-900 dark:text-gray-100 block">
-                                {hideBalance ? 'Rp ••••••' : `Rp ${formatIDR(acc.balance)}`}
+                                {hideBalance ? 'Rp ••••••••' : `Rp ${formatIDR(acc.balance)}`}
                               </span>
                             </div>
                             <button 
@@ -694,7 +694,7 @@
                               tx.type === 'Transfer' ? 'text-blue-600 dark:text-blue-400' :
                               'text-red-600 dark:text-red-400'
                             }`}>
-                              {hideBalance ? 'Rp •••••' : `${tx.type === 'Pemasukan' ? '+' : tx.type === 'Transfer' ? '' : '-'} Rp ${formatIDR(tx.amount)}`}
+                              {hideBalance ? 'Rp ••••••••' : `${tx.type === 'Pemasukan' ? '+' : tx.type === 'Transfer' ? '' : '-'} Rp ${formatIDR(tx.amount)}`}
                             </span>
                           </div>
                         );
@@ -724,7 +724,7 @@
                           <span className={`text-xs font-extrabold ${
                             tx.type === 'Pemasukan' ? 'text-emerald-600' : tx.type === 'Transfer' ? 'text-blue-600' : 'text-red-600'
                           }`}>
-                            {hideBalance ? 'Rp •••••' : `${tx.type === 'Pemasukan' ? '+' : tx.type === 'Transfer' ? '' : '-'} Rp ${formatIDR(tx.amount)}`}
+                            {hideBalance ? 'Rp ••••••••' : `${tx.type === 'Pemasukan' ? '+' : tx.type === 'Transfer' ? '' : '-'} Rp ${formatIDR(tx.amount)}`}
                           </span>
                         </div>
                       );
@@ -764,8 +764,8 @@
                           </div>
 
                           <div className="flex items-center justify-between text-xs text-gray-400">
-                            <span>Terkumpul: {hideBalance ? 'Rp •••••' : `Rp ${formatIDR(goal.saved)}`}</span>
-                            <span>Target: {hideBalance ? 'Rp •••••' : `Rp ${formatIDR(goal.target)}`}</span>
+                            <span>Terkumpul: {hideBalance ? 'Rp ••••••••' : `Rp ${formatIDR(goal.saved)}`}</span>
+                            <span>Target: {hideBalance ? 'Rp ••••••••' : `Rp ${formatIDR(goal.target)}`}</span>
                           </div>
 
                           <button 
