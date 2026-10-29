@@ -20,11 +20,6 @@
               600: '#16a34a',
               700: '#15803d',
               900: '#14532d',
-            },
-            bank: {
-              cardDark: '#121826',
-              cardLight: '#ffffff',
-              accent: '#3b82f6',
             }
           }
         }
@@ -41,7 +36,6 @@
   <script src="https://unpkg.com/tesseract.js@v4.0.1/dist/tesseract.min.js"></script>
 
   <style>
-    /* Custom Scrollbar & Sticky Layout Rules */
     body {
       touch-action: manipulation;
       -webkit-tap-highlight-color: transparent;
@@ -96,30 +90,24 @@
       return res.trim();
     };
 
-    // Default Categories & Accounts
-    const DEFAULT_ACCOUNTS = [
-      { id: 'acc-1', name: 'BCA Utama', type: 'Bank', balance: 0, icon: 'landmark', color: 'bg-blue-600' },
-      { id: 'acc-2', name: 'Dompet Cash', type: 'Cash', balance: 0, icon: 'wallet', color: 'bg-emerald-600' },
-      { id: 'acc-3', name: 'Bibit Reksa Dana', type: 'Investasi', balance: 0, icon: 'trending-up', color: 'bg-purple-600' }
-    ];
-
     const CATEGORIES = {
       Pengeluaran: ['Makanan', 'Transportasi', 'Belanja', 'Tagihan & Utilitas', 'Hiburan', 'Kesehatan', 'Pendidikan', 'Lainnya'],
       Pemasukan: ['Gaji', 'Bonus', 'Investasi', 'Hasil Usaha', 'Hadiah', 'Lainnya']
     };
 
     function App() {
-      // LocalStorage State Initializer
       const [isDarkMode, setIsDarkMode] = useState(() => {
         return localStorage.getItem('pft_theme') === 'dark' || true;
       });
+      
       const [hideBalance, setHideBalance] = useState(() => {
         return localStorage.getItem('pft_hide_bal') === 'true';
       });
 
+      // KOSONG DARI AWAL
       const [accounts, setAccounts] = useState(() => {
         const saved = localStorage.getItem('pft_accounts');
-        return saved ? JSON.parse(saved) : DEFAULT_ACCOUNTS;
+        return saved ? JSON.parse(saved) : [];
       });
 
       const [transactions, setTransactions] = useState(() => {
@@ -132,19 +120,18 @@
         return saved ? JSON.parse(saved) : [];
       });
 
-      // App Navigation & Modals
-      const [activeTab, setActiveTab] = useState('home'); // home, history, goals, accounts, analytics
+      const [activeTab, setActiveTab] = useState('home'); // home, history, goals
       const [isFormOpen, setIsFormOpen] = useState(false);
       const [isVoiceListening, setIsVoiceListening] = useState(false);
       const [voiceTranscript, setVoiceTranscript] = useState('');
       const [ocrProcessing, setOcrProcessing] = useState(false);
 
       // Form State
-      const [formType, setFormType] = useState('Pengeluaran'); // Pengeluaran, Pemasukan, Transfer
+      const [formType, setFormType] = useState('Pengeluaran');
       const [formAmount, setFormAmount] = useState('');
       const [formCategory, setFormCategory] = useState('Makanan');
-      const [formAccountId, setFormAccountId] = useState(accounts[0]?.id || '');
-      const [formToAccountId, setFormToAccountId] = useState(accounts[1]?.id || '');
+      const [formAccountId, setFormAccountId] = useState('');
+      const [formToAccountId, setFormToAccountId] = useState('');
       const [formNote, setFormNote] = useState('');
       const [formDate, setFormDate] = useState(new Date().toISOString().split('T')[0]);
 
@@ -163,9 +150,9 @@
       // Deposit to Goal Modal State
       const [selectedGoal, setSelectedGoal] = useState(null);
       const [goalDepositAmount, setGoalDepositAmount] = useState('');
-      const [goalDepositAccId, setGoalDepositAccId] = useState(accounts[0]?.id || '');
+      const [goalDepositAccId, setGoalDepositAccId] = useState('');
 
-      // Sync to LocalStorage
+      // Sync LocalStorage
       useEffect(() => {
         localStorage.setItem('pft_accounts', JSON.stringify(accounts));
       }, [accounts]);
@@ -197,12 +184,12 @@
         }
       });
 
-      // Calculate Net Worth
+      // Total Net Worth
       const totalNetWorth = useMemo(() => {
         return accounts.reduce((acc, curr) => acc + Number(curr.balance || 0), 0);
       }, [accounts]);
 
-      // Voice Parsing Logic (Smart Detection)
+      // Smart Voice Recognition Parser
       const startVoiceRecognition = () => {
         const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
         if (!SpeechRecognition) {
@@ -225,8 +212,7 @@
           setIsVoiceListening(false);
         };
 
-        recognition.onerror = (e) => {
-          console.error(e);
+        recognition.onerror = () => {
           setVoiceTranscript('Gagal mengenali suara. Silakan coba lagi.');
           setIsVoiceListening(false);
         };
@@ -239,22 +225,17 @@
       };
 
       const parseVoiceCommand = (text) => {
-        // Opening Form
         setIsFormOpen(true);
 
-        // 1. Detect Type (Pengeluaran / Pemasukan / Transfer)
         let detectedType = 'Pengeluaran';
         if (text.includes('pemasukan') || text.includes('dapat') || text.includes('gaji') || text.includes('terima') || text.includes('masuk')) {
           detectedType = 'Pemasukan';
-        } else if (text.includes('transfer') || text.includes('pindah') || text.includes('kirim')) {
+        } else if (text.includes('transfer') || text.includes('pindah')) {
           detectedType = 'Transfer';
         }
         setFormType(detectedType);
 
-        // 2. Detect Amount (Angka, Ribu, Juta)
         let amount = 0;
-        const numberMatches = text.match(/\d+/g);
-        
         if (text.includes('juta')) {
           const val = text.match(/(\d+|\bse\b|\bsatu\b|\bdua\b|\btiga\b|\bempat\b|\blima\b)\s*juta/i);
           if (val) {
@@ -269,6 +250,7 @@
           }
         }
         
+        const numberMatches = text.match(/\d+/g);
         if (!amount && numberMatches) {
           amount = parseInt(numberMatches.join(''));
         }
@@ -277,63 +259,52 @@
           setFormAmount(formatIDR(amount));
         }
 
-        // 3. Detect Account
         const foundAcc = accounts.find(acc => text.includes(acc.name.toLowerCase()) || text.includes(acc.type.toLowerCase()));
         if (foundAcc) {
           setFormAccountId(foundAcc.id);
+        } else if (accounts.length > 0) {
+          setFormAccountId(accounts[0].id);
         }
 
-        // 4. Detect Category
         const allCats = CATEGORIES.Pengeluaran.concat(CATEGORIES.Pemasukan);
         const foundCat = allCats.find(cat => text.includes(cat.toLowerCase()));
         if (foundCat) {
           setFormCategory(foundCat);
         } else {
-          if (text.includes('bensin') || text.includes('parkir') || text.includes('ojek') || text.includes('gojek') || text.includes('grab')) {
+          if (text.includes('bensin') || text.includes('parkir') || text.includes('ojek')) {
             setFormCategory('Transportasi');
-          } else if (text.includes('makan') || text.includes('minum') || text.includes('kopi') || text.includes('resto') || text.includes('nasi')) {
+          } else if (text.includes('makan') || text.includes('minum') || text.includes('kopi')) {
             setFormCategory('Makanan');
-          } else if (text.includes('beli') || text.includes('baju') || text.includes('sepatu') || text.includes('tokopedia') || text.includes('shopee')) {
+          } else if (text.includes('beli') || text.includes('baju')) {
             setFormCategory('Belanja');
-          } else if (text.includes('pulsa') || text.includes('listrik') || text.includes('wifi') || text.includes('air')) {
-            setFormCategory('Tagihan & Utilitas');
           }
         }
 
         setFormNote(text);
       };
 
-      // OCR Parser (Foto Struk/M-Banking)
       const handleImageOCR = (e) => {
         const file = e.target.files[0];
         if (!file) return;
 
         setOcrProcessing(true);
-        Tesseract.recognize(
-          file,
-          'ind+eng',
-          { logger: m => console.log(m) }
-        ).then(({ data: { text } }) => {
+        Tesseract.recognize(file, 'ind+eng').then(({ data: { text } }) => {
           setOcrProcessing(false);
           const lower = text.toLowerCase();
-          
-          // Regex Cek Nominal Tertinggi / Total
           const totalMatch = lower.match(/(total|amount|jumlah|rp\.?)\s*([\d\.,]+)/i);
           if (totalMatch) {
             const rawNum = totalMatch[2].replace(/[^\d]/g, '');
-            if (rawNum) {
-              setFormAmount(formatIDR(rawNum));
-            }
+            if (rawNum) setFormAmount(formatIDR(rawNum));
           }
-          setFormNote(`Hasil Scan Struk: ${text.slice(0, 50)}...`);
+          setFormNote(`Scan Struk: ${text.slice(0, 40)}...`);
+          if (accounts.length > 0) setFormAccountId(accounts[0].id);
           setIsFormOpen(true);
-        }).catch(err => {
+        }).catch(() => {
           setOcrProcessing(false);
-          alert('Gagal membaca gambar/struk.');
+          alert('Gagal membaca gambar.');
         });
       };
 
-      // Handle Input Nominal Format
       const handleAmountChange = (e) => {
         const raw = e.target.value.replace(/[^\d]/g, '');
         if (!raw) {
@@ -343,7 +314,6 @@
         setFormAmount(formatIDR(raw));
       };
 
-      // Handle Submit Transaksi
       const handleSaveTransaction = (e) => {
         e.preventDefault();
         const numericAmount = parseInt(formAmount.replace(/\./g, ''), 10);
@@ -352,38 +322,36 @@
           return;
         }
 
+        if (accounts.length === 0) {
+          alert('Silakan buat rekening/aset terlebih dahulu.');
+          return;
+        }
+
+        if (!formAccountId) {
+          setFormAccountId(accounts[0].id);
+        }
+
         if (formType === 'Transfer') {
           if (formAccountId === formToAccountId) {
             alert('Rekening asal dan tujuan tidak boleh sama.');
             return;
           }
-          
           const sourceAcc = accounts.find(a => a.id === formAccountId);
           if (sourceAcc.balance < numericAmount) {
             alert('Saldo rekening asal tidak mencukupi.');
             return;
           }
 
-          // Update Account Balances
           setAccounts(accounts.map(acc => {
             if (acc.id === formAccountId) return { ...acc, balance: acc.balance - numericAmount };
             if (acc.id === formToAccountId) return { ...acc, balance: acc.balance + numericAmount };
             return acc;
           }));
-
         } else if (formType === 'Pengeluaran') {
-          const sourceAcc = accounts.find(a => a.id === formAccountId);
-          if (sourceAcc && sourceAcc.balance < numericAmount) {
-            if (!confirm('Saldo rekening ini kurang dari nominal pengeluaran. Lanjutkan?')) {
-              return;
-            }
-          }
-
           setAccounts(accounts.map(acc => {
             if (acc.id === formAccountId) return { ...acc, balance: acc.balance - numericAmount };
             return acc;
           }));
-
         } else if (formType === 'Pemasukan') {
           setAccounts(accounts.map(acc => {
             if (acc.id === formAccountId) return { ...acc, balance: acc.balance + numericAmount };
@@ -403,14 +371,11 @@
         };
 
         setTransactions([newTx, ...transactions]);
-
-        // Reset Form & Close
         setFormAmount('');
         setFormNote('');
         setIsFormOpen(false);
       };
 
-      // Handle Add Account
       const handleSaveAccount = (e) => {
         e.preventDefault();
         const bal = parseInt(accBalance.replace(/\./g, ''), 10) || 0;
@@ -428,7 +393,14 @@
         setIsAccModalOpen(false);
       };
 
-      // Handle Save Goal
+      // FUNGSI HAPUS REKENING / ASET
+      const handleDeleteAccount = (accId, accName, accBalance) => {
+        const confirmMsg = `Apakah Anda yakin ingin menghapus rekening "${accName}"?\nSisa saldo saat ini: Rp ${formatIDR(accBalance)}`;
+        if (confirm(confirmMsg)) {
+          setAccounts(accounts.filter(a => a.id !== accId));
+        }
+      };
+
       const handleSaveGoal = (e) => {
         e.preventDefault();
         const target = parseInt(goalTarget.replace(/\./g, ''), 10) || 0;
@@ -448,38 +420,34 @@
         setIsGoalModalOpen(false);
       };
 
-      // Setor Dana ke Goal
       const handleDepositToGoal = (e) => {
         e.preventDefault();
         const depAmount = parseInt(goalDepositAmount.replace(/\./g, ''), 10);
         if (isNaN(depAmount) || depAmount <= 0) return;
 
         const sourceAcc = accounts.find(a => a.id === goalDepositAccId);
-        if (sourceAcc.balance < depAmount) {
+        if (!sourceAcc || sourceAcc.balance < depAmount) {
           alert('Saldo rekening tidak mencukupi.');
           return;
         }
 
-        // Potong Saldo Rekening
         setAccounts(accounts.map(acc => {
           if (acc.id === goalDepositAccId) return { ...acc, balance: acc.balance - depAmount };
           return acc;
         }));
 
-        // Tambah ke Goal
         setGoals(goals.map(g => {
           if (g.id === selectedGoal.id) return { ...g, saved: g.saved + depAmount };
           return g;
         }));
 
-        // Catat sebagai Pengeluaran Alokasi Tabungan
         const newTx = {
           id: 'tx-' + Date.now(),
           type: 'Pengeluaran',
           amount: depAmount,
-          category: 'Investasi/Tabungan',
+          category: 'Tabungan',
           accountId: goalDepositAccId,
-          note: `Alokasi Tabungan Target: ${selectedGoal.title}`,
+          note: `Setor Target: ${selectedGoal.title}`,
           date: new Date().toISOString().split('T')[0]
         };
         setTransactions([newTx, ...transactions]);
@@ -488,7 +456,6 @@
         setGoalDepositAmount('');
       };
 
-      // Export / Import JSON Backup
       const exportData = () => {
         const data = { accounts, transactions, goals };
         const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
@@ -525,12 +492,12 @@
           {/* TOP NAVBAR */}
           <header className="sticky top-0 z-30 backdrop-blur-md bg-white/80 dark:bg-gray-900/80 border-b border-gray-200 dark:border-gray-800 px-4 py-3 flex items-center justify-between">
             <div className="flex items-center space-x-3">
-              <div className="w-10 h-10 rounded-full bg-brand-600 text-white flex items-center justify-center font-bold text-lg shadow-md shadow-brand-500/20">
+              <div className="w-10 h-10 rounded-full bg-brand-600 text-white flex items-center justify-center font-bold text-lg shadow-md">
                 P
               </div>
               <div>
-                <h1 className="text-xs text-gray-500 dark:text-gray-400 font-medium">Selamat Datang</h1>
-                <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">Personal Vault</p>
+                <h1 className="text-xs text-gray-500 dark:text-gray-400 font-medium">Personal Finance</h1>
+                <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">Vault Utama</p>
               </div>
             </div>
 
@@ -554,10 +521,9 @@
             </div>
           </header>
 
-          {/* MAIN CONTENT CONTAINER */}
+          {/* MAIN CONTENT */}
           <main className="flex-1 p-4 space-y-5">
 
-            {/* VOICE SPEECH TRANSCRIPT NOTIFICATION */}
             {voiceTranscript && (
               <div className="p-3 bg-brand-50 dark:bg-brand-950/40 border border-brand-200 dark:border-brand-800/50 rounded-2xl flex items-center justify-between">
                 <div className="flex items-center space-x-2 text-brand-700 dark:text-brand-300 text-xs">
@@ -570,10 +536,10 @@
               </div>
             )}
 
-            {/* VIEW 1: HOME TAB */}
+            {/* TAB HOME */}
             {activeTab === 'home' && (
               <>
-                {/* NET WORTH CARD (BANK STYLE) */}
+                {/* NET WORTH CARD */}
                 <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 dark:from-gray-900 dark:via-gray-950 dark:to-black text-white p-6 shadow-xl border border-gray-800">
                   <div className="absolute top-0 right-0 -mt-8 -mr-8 w-32 h-32 bg-brand-500/10 rounded-full blur-2xl"></div>
                   
@@ -581,7 +547,7 @@
                     <span className="text-xs uppercase tracking-wider text-gray-400 font-medium">Total Kekayaan Bersih</span>
                     <button 
                       onClick={() => setHideBalance(!hideBalance)} 
-                      className="text-gray-400 hover:text-white transition"
+                      className="text-gray-400 hover:text-white transition p-1 cursor-pointer"
                     >
                       <i data-lucide={hideBalance ? "eye-off" : "eye"} className="w-4 h-4"></i>
                     </button>
@@ -591,7 +557,6 @@
                     {hideBalance ? 'Rp ••••••••' : `Rp ${formatIDR(totalNetWorth)}`}
                   </div>
 
-                  {/* QUICK STATS */}
                   <div className="grid grid-cols-2 gap-3 pt-4 border-t border-gray-800/80 text-xs">
                     <div>
                       <span className="text-gray-400 block mb-0.5">Total Rekening</span>
@@ -604,10 +569,10 @@
                   </div>
                 </div>
 
-                {/* ACTION SHORTCUTS (BANK APP STYLE) */}
+                {/* SHORTCUTS */}
                 <div className="grid grid-cols-4 gap-3">
                   <button 
-                    onClick={() => { setFormType('Pengeluaran'); setIsFormOpen(true); }}
+                    onClick={() => { setFormType('Pengeluaran'); if(accounts.length>0) setFormAccountId(accounts[0].id); setIsFormOpen(true); }}
                     className="p-3 rounded-2xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 flex flex-col items-center justify-center space-y-1 shadow-sm active:scale-95 transition"
                   >
                     <div className="w-10 h-10 rounded-xl bg-red-100 dark:bg-red-950/50 text-red-600 flex items-center justify-center">
@@ -617,7 +582,7 @@
                   </button>
 
                   <button 
-                    onClick={() => { setFormType('Pemasukan'); setIsFormOpen(true); }}
+                    onClick={() => { setFormType('Pemasukan'); if(accounts.length>0) setFormAccountId(accounts[0].id); setIsFormOpen(true); }}
                     className="p-3 rounded-2xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 flex flex-col items-center justify-center space-y-1 shadow-sm active:scale-95 transition"
                   >
                     <div className="w-10 h-10 rounded-xl bg-emerald-100 dark:bg-emerald-950/50 text-emerald-600 flex items-center justify-center">
@@ -627,7 +592,7 @@
                   </button>
 
                   <button 
-                    onClick={() => { setFormType('Transfer'); setIsFormOpen(true); }}
+                    onClick={() => { setFormType('Transfer'); if(accounts.length>1) { setFormAccountId(accounts[0].id); setFormToAccountId(accounts[1].id); } setIsFormOpen(true); }}
                     className="p-3 rounded-2xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 flex flex-col items-center justify-center space-y-1 shadow-sm active:scale-95 transition"
                   >
                     <div className="w-10 h-10 rounded-xl bg-blue-100 dark:bg-blue-950/50 text-blue-600 flex items-center justify-center">
@@ -640,12 +605,12 @@
                     <div className="w-10 h-10 rounded-xl bg-purple-100 dark:bg-purple-950/50 text-purple-600 flex items-center justify-center">
                       <i data-lucide="scan" className="w-5 h-5"></i>
                     </div>
-                    <span className="text-[11px] font-medium text-gray-700 dark:text-gray-300">Scan Struk</span>
+                    <span className="text-[11px] font-medium text-gray-700 dark:text-gray-300">Scan</span>
                     <input type="file" accept="image/*" onChange={handleImageOCR} className="hidden" />
                   </label>
                 </div>
 
-                {/* MY ACCOUNTS SECTION */}
+                {/* ACCOUNTS LIST WITH DELETE BUTTON */}
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
                     <h2 className="text-sm font-bold text-gray-900 dark:text-gray-100 uppercase tracking-wider">Rekening & Aset</h2>
@@ -654,26 +619,42 @@
                     </button>
                   </div>
 
-                  <div className="space-y-2">
-                    {accounts.map(acc => (
-                      <div key={acc.id} className="p-4 rounded-2xl bg-white dark:bg-gray-900 border border-gray-200/80 dark:border-gray-800 flex items-center justify-between shadow-sm">
-                        <div className="flex items-center space-x-3">
-                          <div className={`w-10 h-10 rounded-xl ${acc.color} text-white flex items-center justify-center shadow-md`}>
-                            <i data-lucide={acc.type === 'Bank' ? 'landmark' : acc.type === 'Cash' ? 'wallet' : 'trending-up'} className="w-5 h-5"></i>
+                  {accounts.length === 0 ? (
+                    <div className="p-6 text-center text-xs text-gray-400 bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800">
+                      Belum ada rekening. Klik "+ Tambah" untuk mulai mendata rekening/asetmu.
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      {accounts.map(acc => (
+                        <div key={acc.id} className="p-4 rounded-2xl bg-white dark:bg-gray-900 border border-gray-200/80 dark:border-gray-800 flex items-center justify-between shadow-sm group">
+                          <div className="flex items-center space-x-3">
+                            <div className={`w-10 h-10 rounded-xl ${acc.color} text-white flex items-center justify-center shadow-md`}>
+                              <i data-lucide={acc.type === 'Bank' ? 'landmark' : acc.type === 'Cash' ? 'wallet' : 'trending-up'} className="w-5 h-5"></i>
+                            </div>
+                            <div>
+                              <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">{acc.name}</h3>
+                              <span className="text-[11px] text-gray-400">{acc.type}</span>
+                            </div>
                           </div>
-                          <div>
-                            <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">{acc.name}</h3>
-                            <span className="text-[11px] text-gray-400">{acc.type}</span>
+
+                          <div className="flex items-center space-x-3">
+                            <div className="text-right">
+                              <span className="text-sm font-bold text-gray-900 dark:text-gray-100 block">
+                                {hideBalance ? 'Rp ••••••' : `Rp ${formatIDR(acc.balance)}`}
+                              </span>
+                            </div>
+                            <button 
+                              onClick={() => handleDeleteAccount(acc.id, acc.name, acc.balance)}
+                              className="p-1.5 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/40 transition"
+                              title="Hapus Rekening"
+                            >
+                              <i data-lucide="trash-2" className="w-4 h-4"></i>
+                            </button>
                           </div>
                         </div>
-                        <div className="text-right">
-                          <span className="text-sm font-bold text-gray-900 dark:text-gray-100">
-                            {hideBalance ? 'Rp ••••••' : `Rp ${formatIDR(acc.balance)}`}
-                          </span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
 
                 {/* RECENT TRANSACTIONS */}
@@ -705,7 +686,7 @@
                               </div>
                               <div>
                                 <h4 className="text-xs font-semibold text-gray-900 dark:text-gray-100">{tx.note || tx.category}</h4>
-                                <span className="text-[10px] text-gray-400">{acc?.name} • {tx.date}</span>
+                                <span className="text-[10px] text-gray-400">{acc?.name || 'Rekening Dihapus'} • {tx.date}</span>
                               </div>
                             </div>
                             <span className={`text-xs font-bold ${
@@ -713,7 +694,7 @@
                               tx.type === 'Transfer' ? 'text-blue-600 dark:text-blue-400' :
                               'text-red-600 dark:text-red-400'
                             }`}>
-                              {tx.type === 'Pemasukan' ? '+' : tx.type === 'Transfer' ? '' : '-'} Rp {formatIDR(tx.amount)}
+                              {hideBalance ? 'Rp •••••' : `${tx.type === 'Pemasukan' ? '+' : tx.type === 'Transfer' ? '' : '-'} Rp ${formatIDR(tx.amount)}`}
                             </span>
                           </div>
                         );
@@ -724,12 +705,12 @@
               </>
             )}
 
-            {/* VIEW 2: HISTORY TAB */}
+            {/* TAB HISTORY */}
             {activeTab === 'history' && (
               <div className="space-y-4">
                 <h2 className="text-base font-bold text-gray-900 dark:text-gray-100">Riwayat Transaksi</h2>
                 {transactions.length === 0 ? (
-                  <p className="text-xs text-gray-400 text-center py-8">Belum ada transaksi recorded.</p>
+                  <p className="text-xs text-gray-400 text-center py-8">Belum ada transaksi.</p>
                 ) : (
                   <div className="space-y-2">
                     {transactions.map(tx => {
@@ -738,12 +719,12 @@
                         <div key={tx.id} className="p-4 rounded-2xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 flex items-center justify-between">
                           <div>
                             <h4 className="text-xs font-bold text-gray-900 dark:text-gray-100">{tx.note || tx.category}</h4>
-                            <p className="text-[11px] text-gray-400">{tx.category} • {acc?.name} • {tx.date}</p>
+                            <p className="text-[11px] text-gray-400">{tx.category} • {acc?.name || 'Rekening Dihapus'} • {tx.date}</p>
                           </div>
                           <span className={`text-xs font-extrabold ${
                             tx.type === 'Pemasukan' ? 'text-emerald-600' : tx.type === 'Transfer' ? 'text-blue-600' : 'text-red-600'
                           }`}>
-                            {tx.type === 'Pemasukan' ? '+' : tx.type === 'Transfer' ? '' : '-'} Rp {formatIDR(tx.amount)}
+                            {hideBalance ? 'Rp •••••' : `${tx.type === 'Pemasukan' ? '+' : tx.type === 'Transfer' ? '' : '-'} Rp ${formatIDR(tx.amount)}`}
                           </span>
                         </div>
                       );
@@ -753,7 +734,7 @@
               </div>
             )}
 
-            {/* VIEW 3: TARGET TABUNGAN (GOALS) */}
+            {/* TAB GOALS */}
             {activeTab === 'goals' && (
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
@@ -765,7 +746,7 @@
 
                 {goals.length === 0 ? (
                   <div className="p-6 text-center text-xs text-gray-400 bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800">
-                    Belum ada target tabungan yang dibuat.
+                    Belum ada target tabungan.
                   </div>
                 ) : (
                   <div className="space-y-3">
@@ -783,12 +764,12 @@
                           </div>
 
                           <div className="flex items-center justify-between text-xs text-gray-400">
-                            <span>Terkumpul: Rp {formatIDR(goal.saved)}</span>
-                            <span>Target: Rp {formatIDR(goal.target)}</span>
+                            <span>Terkumpul: {hideBalance ? 'Rp •••••' : `Rp ${formatIDR(goal.saved)}`}</span>
+                            <span>Target: {hideBalance ? 'Rp •••••' : `Rp ${formatIDR(goal.target)}`}</span>
                           </div>
 
                           <button 
-                            onClick={() => setSelectedGoal(goal)}
+                            onClick={() => { setSelectedGoal(goal); if(accounts.length>0) setGoalDepositAccId(accounts[0].id); }}
                             className="w-full py-2 bg-brand-50 dark:bg-brand-950/50 text-brand-600 dark:text-brand-400 text-xs font-semibold rounded-xl border border-brand-200 dark:border-brand-800"
                           >
                             + Setor Dana Ke Target Ini
@@ -803,9 +784,8 @@
 
           </main>
 
-          {/* STICKY BOTTOM BAR WITH CENTER MIC BUTTON */}
+          {/* STICKY BOTTOM BAR */}
           <nav className="fixed bottom-0 left-0 right-0 max-w-md mx-auto z-40 bg-white/90 dark:bg-gray-900/90 backdrop-blur-lg border-t border-gray-200 dark:border-gray-800 px-4 py-2 flex items-center justify-between">
-            
             <button 
               onClick={() => setActiveTab('home')}
               className={`flex flex-col items-center space-y-1 ${activeTab === 'home' ? 'text-brand-600 dark:text-brand-400' : 'text-gray-400'}`}
@@ -822,7 +802,6 @@
               <span className="text-[10px] font-medium">Riwayat</span>
             </button>
 
-            {/* CENTER MIC BUTTON */}
             <div className="relative -top-5">
               <button 
                 onClick={startVoiceRecognition}
@@ -843,7 +822,7 @@
             </button>
 
             <button 
-              onClick={() => setIsFormOpen(true)}
+              onClick={() => { if(accounts.length>0) setFormAccountId(accounts[0].id); setIsFormOpen(true); }}
               className="flex flex-col items-center space-y-1 text-gray-400 hover:text-gray-600"
             >
               <i data-lucide="plus-circle" className="w-5 h-5"></i>
@@ -851,20 +830,18 @@
             </button>
           </nav>
 
-          {/* MODAL TRANSACTION FORM */}
+          {/* MODAL TRANSACTION */}
           {isFormOpen && (
             <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4">
-              <div className="w-full max-w-md bg-white dark:bg-gray-900 rounded-t-3xl sm:rounded-3xl p-6 space-y-4 shadow-2xl border border-gray-200 dark:border-gray-800 animate-in slide-in-from-bottom">
-                
+              <div className="w-full max-w-md bg-white dark:bg-gray-900 rounded-t-3xl sm:rounded-3xl p-6 space-y-4 shadow-2xl border border-gray-200 dark:border-gray-800">
                 <div className="flex items-center justify-between border-b border-gray-100 dark:border-gray-800 pb-3">
                   <h3 className="text-base font-bold text-gray-900 dark:text-gray-100">Catat Transaksi</h3>
-                  <button onClick={() => setIsFormOpen(false)} className="text-gray-400 hover:text-gray-600">
+                  <button onClick={() => setIsFormOpen(false)} className="text-gray-400">
                     <i data-lucide="x" className="w-5 h-5"></i>
                   </button>
                 </div>
 
                 <form onSubmit={handleSaveTransaction} className="space-y-4">
-                  {/* TYPE SWITCHER */}
                   <div className="grid grid-cols-3 gap-1 bg-gray-100 dark:bg-gray-800 p-1 rounded-xl text-xs font-semibold">
                     {['Pengeluaran', 'Pemasukan', 'Transfer'].map(t => (
                       <button
@@ -878,7 +855,6 @@
                     ))}
                   </div>
 
-                  {/* NOMINAL INPUT */}
                   <div className="space-y-1">
                     <label className="text-xs font-medium text-gray-500">Nominal (Rp)</label>
                     <div className="relative">
@@ -899,29 +875,19 @@
                     )}
                   </div>
 
-                  {/* REKENING ASAL / TUJUAN */}
-                  <div className="grid grid-cols-1 gap-3">
-                    <div>
-                      <label className="text-xs font-medium text-gray-500">
-                        {formType === 'Transfer' ? 'Dari Rekening' : 'Rekening / Sumber Dana'}
-                      </label>
-                      <select 
-                        value={formAccountId} 
-                        onChange={e => setFormAccountId(e.target.value)}
-                        className="w-full mt-1 p-2.5 rounded-xl bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-xs font-semibold text-gray-900 dark:text-gray-100"
-                      >
-                        {accounts.map(acc => (
-                          <option key={acc.id} value={acc.id}>{acc.name} (Rp {formatIDR(acc.balance)})</option>
-                        ))}
-                      </select>
+                  {accounts.length === 0 ? (
+                    <div className="p-3 bg-amber-50 text-amber-700 text-xs rounded-xl">
+                      ⚠️ Belum ada rekening. Tambahkan rekening dulu di menu Beranda.
                     </div>
-
-                    {formType === 'Transfer' && (
+                  ) : (
+                    <div className="grid grid-cols-1 gap-3">
                       <div>
-                        <label className="text-xs font-medium text-gray-500">Ke Rekening Tujuan</label>
+                        <label className="text-xs font-medium text-gray-500">
+                          {formType === 'Transfer' ? 'Dari Rekening' : 'Rekening / Sumber Dana'}
+                        </label>
                         <select 
-                          value={formToAccountId} 
-                          onChange={e => setFormToAccountId(e.target.value)}
+                          value={formAccountId} 
+                          onChange={e => setFormAccountId(e.target.value)}
                           className="w-full mt-1 p-2.5 rounded-xl bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-xs font-semibold text-gray-900 dark:text-gray-100"
                         >
                           {accounts.map(acc => (
@@ -929,10 +895,24 @@
                           ))}
                         </select>
                       </div>
-                    )}
-                  </div>
 
-                  {/* CATEGORY (IF NOT TRANSFER) */}
+                      {formType === 'Transfer' && (
+                        <div>
+                          <label className="text-xs font-medium text-gray-500">Ke Rekening Tujuan</label>
+                          <select 
+                            value={formToAccountId} 
+                            onChange={e => setFormToAccountId(e.target.value)}
+                            className="w-full mt-1 p-2.5 rounded-xl bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-xs font-semibold text-gray-900 dark:text-gray-100"
+                          >
+                            {accounts.map(acc => (
+                              <option key={acc.id} value={acc.id}>{acc.name} (Rp {formatIDR(acc.balance)})</option>
+                            ))}
+                          </select>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
                   {formType !== 'Transfer' && (
                     <div>
                       <label className="text-xs font-medium text-gray-500">Kategori</label>
@@ -948,21 +928,20 @@
                     </div>
                   )}
 
-                  {/* NOTES */}
                   <div>
-                    <label className="text-xs font-medium text-gray-500">Catatan / Keterangan</label>
+                    <label className="text-xs font-medium text-gray-500">Catatan</label>
                     <input 
                       type="text"
                       value={formNote}
                       onChange={e => setFormNote(e.target.value)}
-                      placeholder="Misal: Beli Kopi, Gaji Bulanan..."
+                      placeholder="Misal: Beli Kopi..."
                       className="w-full mt-1 p-2.5 rounded-xl bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-xs font-medium text-gray-900 dark:text-gray-100"
                     />
                   </div>
 
                   <button 
                     type="submit" 
-                    className="w-full py-3 bg-brand-600 hover:bg-brand-500 text-white font-bold text-sm rounded-xl shadow-lg shadow-brand-500/30 transition"
+                    className="w-full py-3 bg-brand-600 hover:bg-brand-500 text-white font-bold text-sm rounded-xl shadow-lg transition"
                   >
                     Simpan Transaksi
                   </button>
@@ -989,7 +968,7 @@
                       type="text" 
                       value={accName}
                       onChange={e => setAccName(e.target.value)}
-                      placeholder="Misal: BCA, Mandiri, Cash, Bibit"
+                      placeholder="Misal: BCA, Dompet Cash, Bibit"
                       className="w-full mt-1 p-2.5 rounded-xl bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-xs font-semibold text-gray-900 dark:text-gray-100"
                       required
                     />
@@ -1005,7 +984,7 @@
                       <option value="Bank">Bank</option>
                       <option value="Cash">Cash / Tunai</option>
                       <option value="Investasi">Investasi / Reksa Dana</option>
-                      <option value="E-Wallet">E-Wallet (Gopay/OVO/Dana)</option>
+                      <option value="E-Wallet">E-Wallet</option>
                     </select>
                   </div>
 
@@ -1022,7 +1001,7 @@
 
                   <button 
                     type="submit" 
-                    className="w-full py-3 bg-brand-600 hover:bg-brand-500 text-white font-bold text-sm rounded-xl shadow-lg shadow-brand-500/30 transition"
+                    className="w-full py-3 bg-brand-600 hover:bg-brand-500 text-white font-bold text-sm rounded-xl shadow-lg transition"
                   >
                     Simpan Rekening
                   </button>
@@ -1049,7 +1028,7 @@
                       type="text" 
                       value={goalTitle}
                       onChange={e => setGoalTitle(e.target.value)}
-                      placeholder="Misal: Beli Laptop Baru, Dana Darurat"
+                      placeholder="Misal: Beli Laptop Baru"
                       className="w-full mt-1 p-2.5 rounded-xl bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-xs font-semibold text-gray-900 dark:text-gray-100"
                       required
                     />
@@ -1080,7 +1059,7 @@
 
                   <button 
                     type="submit" 
-                    className="w-full py-3 bg-brand-600 hover:bg-brand-500 text-white font-bold text-sm rounded-xl shadow-lg shadow-brand-500/30 transition"
+                    className="w-full py-3 bg-brand-600 hover:bg-brand-500 text-white font-bold text-sm rounded-xl shadow-lg transition"
                   >
                     Simpan Target
                   </button>
@@ -1128,7 +1107,7 @@
 
                   <button 
                     type="submit" 
-                    className="w-full py-3 bg-brand-600 hover:bg-brand-500 text-white font-bold text-sm rounded-xl shadow-lg shadow-brand-500/30 transition"
+                    className="w-full py-3 bg-brand-600 hover:bg-brand-500 text-white font-bold text-sm rounded-xl shadow-lg transition"
                   >
                     Konfirmasi Setoran
                   </button>
